@@ -84,6 +84,7 @@ class UniformExperienceReplay(ExperienceReplay):
         return self._transitions[indices, :]
 
 
+
 # Implemented from https://arxiv.org/pdf/1511.05952
 class PrioritizedExperienceReplay(ExperienceReplay):
     """
@@ -97,7 +98,8 @@ class PrioritizedExperienceReplay(ExperienceReplay):
     def __init__(self, max_size, alpha, beta, epsilon=1e-5):
         super(PrioritizedExperienceReplay, self).__init__(max_size)
         self._alpha = alpha
-        self._beta = beta
+        self._beta_start = beta  # Initial beta value
+        self._beta_end = 1.0     # Final beta value
         self._epsilon = epsilon  # Added epsilon to avoid zero priority
         self._max_priority = 1.0  # Initial max priority
 
@@ -167,5 +169,13 @@ class PrioritizedExperienceReplay(ExperienceReplay):
             # Update max_priority if necessary
             self._max_priority = max(self._max_priority, priority + self._epsilon)
 
-    def update_beta(self, beta):
-        self._beta = beta
+    def update_beta(self, step, total_steps):
+        """
+        Anneal beta from its initial value to 1.0 over the course of training.
+        
+        Parameters:
+        - step: Current training step.
+        - total_steps: Total number of training steps.
+        """
+        fraction = min(step / total_steps, 1.0)  # Ensure fraction <= 1.0
+        self._beta = self._beta_start + fraction * (self._beta_end - self._beta_start)

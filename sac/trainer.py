@@ -5,6 +5,7 @@ from base.evaluator import evaluate
 from sac_agent_rnd import SACAgent
 from utils import utils
 from hockey import hockey_env as h_env
+from base.experience_replay import PrioritizedExperienceReplay
 
 import torch
 
@@ -43,6 +44,11 @@ class SACTrainer:
             }
         }
 
+        print(f"Buffer type: {type(agent.buffer)}")
+        # Total steps for beta annealing
+        total_steps = self._config['max_episodes'] * self._config['max_steps']
+
+
         episode_counter = 1
         total_step_counter = 0
         grad_updates = 0
@@ -76,9 +82,6 @@ class SACTrainer:
 
                 agent_x, agent_y, puck_x, puck_y = utils.get_agent_puck_positions(ob)
                 def_reward = utils.compute_defensive_reward(agent_x, agent_y, puck_x, puck_y)
-                # print def reward % 25 of steps
-                #if step % 25 == 0:
-                #    print(f'def_reward: {def_reward}')
 
                 if self._config.get('sparse', False):
                     if done:
@@ -93,11 +96,11 @@ class SACTrainer:
                 else:
                     step_reward = (
                         reward
-                        + 3 * _info['reward_closeness_to_puck']
+                        # + 3 * _info['reward_closeness_to_puck']
                         - (1 - touched) * 0.1
                         + touched * first_time_touch * 0.1 * step
-                        + def_reward * 1 # 0.5 # added defensive reward
-                        + env.winner * 10 # 8 # added winner reward as too defensive
+                        + def_reward * 0.75 # 0.5 # added defensive reward
+                        + env.winner * 8 # 8 # added winner reward as too defensive
                     )
                 
                 # Always compute intrinsic reward (RND stays active)
@@ -130,6 +133,11 @@ class SACTrainer:
                 ob = next_state
                 obs_agent2 = env.obs_agent_two()
                 total_step_counter += 1
+
+
+            # Update beta after each episode
+            if isinstance(agent.buffer, PrioritizedExperienceReplay):
+                agent.buffer.update_beta(total_step_counter, total_steps)
 
             if agent.buffer.size < self._config['batch_size']:
                 continue

@@ -96,20 +96,20 @@ def compute_defensive_reward(agent_x, agent_y, puck_x, puck_y):
     if puck_x > CENTER_X:  # In offensive half
         # Base positioning reward (stronger near goal center)
         goal_proximity = 1 - min(dist_to_goal / (250/SCALE), 1)
-        step_reward += goal_proximity * 0.35
+        step_reward += goal_proximity * 0.5
         
-        # Extra reward for being between puck and goal when puck is in defensive zone
-    # if puck_x < CENTER_X:
-    #     # Use similar distance scaling as original closeness reward
-    #     max_dist = 250/SCALE
-    #     puck_proximity_factor = 1 - min(dist_to_puck/max_dist, 1)
-    #     step_reward += puck_proximity_factor * 0.2
+    # Extra reward for being between puck and goal when puck is in defensive zone
+    if puck_x < CENTER_X:
+        # Use similar distance scaling as original closeness reward
+        max_dist = 250/SCALE
+        puck_proximity_factor = 1 - min(dist_to_puck/max_dist, 1)
+        step_reward += puck_proximity_factor * 0.2
         
-    #     # Penalize being far from puck in defensive zone (mirror original negative reward)
-    #     step_reward -= (dist_to_puck/max_dist) * 0.1
+        # Penalize being far from puck in defensive zone (mirror original negative reward)
+        step_reward -= (dist_to_puck/max_dist) * 0.1
 
     # Penalize leaving defensive position unnecessarily when enemy is on other side
-    if ( puck_x > CENTER_X and agent_x > CENTER_X - 75/SCALE):  # Too far in middle line
+    if ( puck_x > CENTER_X and agent_x > CENTER_X - 100/SCALE):  # Too far in middle line
         step_reward -= 0.1
 
     return step_reward

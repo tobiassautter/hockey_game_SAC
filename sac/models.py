@@ -61,8 +61,6 @@ class CriticNetwork(nn.Module):
         return x1, x2
 
 # Gaussian policy
-
-
 class ActorNetwork(Feedforward):
     def __init__(self, input_dims, learning_rate, device, lr_milestones, lr_factor=0.5,
                  action_space=None, hidden_sizes=[256, 256], reparam_noise=1e-6):

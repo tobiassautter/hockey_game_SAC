@@ -10,6 +10,7 @@ import pickle
 from base.agent import Agent
 from models import *
 from utils.utils import hard_update, soft_update
+from base.experience_replay import UniformExperienceReplay, PrioritizedExperienceReplay
 
 
 class SACAgent(Agent):
@@ -40,6 +41,20 @@ class SACAgent(Agent):
         self.alpha = userconfig['alpha']
         self.automatic_entropy_tuning = self._config['automatic_entropy_tuning']
         self.eval_mode = False
+
+        # Check for prio buffer
+        # Initialize replay buffer based on --per flag
+        if self._config.get('per', False):  # Check if --per is enabled
+            print("Using PrioritizedExperienceReplay buffer")
+            self.buffer = PrioritizedExperienceReplay(
+                max_size=self._config['buffer_size'],  # Add buffer_size to config
+                alpha=self._config['per_alpha'],
+                beta=self._config['per_beta'],
+                epsilon=1e-5
+            )
+        else:
+            print("Using UniformExperienceReplay buffer")
+            self.buffer = UniformExperienceReplay(max_size=self._config['buffer_size'])
 
         if self._config['lr_milestones'] is None:
             raise ValueError('lr_milestones argument cannot be None!\nExample: --lr_milestones=100 200 300')
