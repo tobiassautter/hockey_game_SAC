@@ -104,7 +104,7 @@ class SACTrainer:
                     )
                 
                 # Always compute intrinsic reward (RND stays active)
-                next_state_tensor = torch.FloatTensor(next_state).to(agent.device).unsqueeze(0)
+                next_state_tensor = torch.as_tensor(next_state, dtype=torch.float32, device=agent.device).unsqueeze(0)
                 intrinsic_reward = agent.compute_intrinsic_reward(next_state_tensor).item()
 
                 # if in first 5 steps set reward to 0

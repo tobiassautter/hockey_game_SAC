@@ -69,7 +69,7 @@ class SACAgent(Agent):
             lr_milestones=lr_milestones,
             lr_factor=self._config['lr_factor'],
             device=self._config['device']
-        )
+        ).to(self.device) # doppelt haelt besser
 
         self.critic = CriticNetwork(
             input_dim=obs_dim,
@@ -79,8 +79,8 @@ class SACAgent(Agent):
             lr_milestones=lr_milestones,
             lr_factor=self._config['lr_factor'],
             device=self._config['device']
-        )
-
+        ).to(self.device) # doppelt haelt besser
+ 
         self.critic_target = CriticNetwork(
             input_dim=obs_dim,
             n_actions=4,
@@ -88,7 +88,7 @@ class SACAgent(Agent):
             hidden_sizes=[256, 256],
             lr_milestones=lr_milestones,
             device=self._config['device']
-        )
+        ).to(self.device) # doppelt haelt besser
 
         # Added RND Networks structures
         self.rnd_target = RNDNetwork(
@@ -96,14 +96,14 @@ class SACAgent(Agent):
             hidden_sizes=[256, 256],  # Match SAC hidden sizes
             output_dim=128,           # Embedding size for RND
             device=self._config['device']
-        ).eval()  # Freeze target network
+        ).to(self.device).eval()  # Freeze target network
 
         self.rnd_predictor = RNDNetwork(
             input_dim=obs_dim,
             hidden_sizes=[256, 256],
             output_dim=128,
             device=self._config['device']
-        )
+        ).to(self.device)
 
         # RND optimizer
         self.rnd_optimizer = torch.optim.AdamW(
@@ -120,8 +120,8 @@ class SACAgent(Agent):
         self.beta_decay = 0.9995  # Adjust for ~2000 episodes
 
         # RND normalization stats
-        self.obs_mean = nn.Parameter(torch.zeros(obs_dim), requires_grad=False)
-        self.obs_std = nn.Parameter(torch.ones(obs_dim), requires_grad=False)
+        self.obs_mean = nn.Parameter(torch.zeros(obs_dim), requires_grad=False).to(self.device)
+        self.obs_std = nn.Parameter(torch.ones(obs_dim), requires_grad=False).to(self.device)
 
         # Prediction Error Normalization
         self.intrinsic_reward_mean = 0.0
@@ -185,7 +185,7 @@ class SACAgent(Agent):
             obs = np.array(obs)
         
         # Create the PyTorch tensor efficiently
-        state = torch.from_numpy(obs).float().to(self.actor.device).unsqueeze(0)
+        state = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         
         #state = torch.FloatTensor(obs).to(self.actor.device).unsqueeze(0) #orig
         if evaluate is False:
@@ -217,17 +217,15 @@ class SACAgent(Agent):
         - Adjusting the entropy coefficient (if automatic entropy tuning is enabled).
         """
 
-
-        
         # Step 1: Sample a batch of transitions from the replay buffer
         data = self.buffer.sample(self._config['batch_size'])
         
         # Extract components from the batch
-        state = torch.FloatTensor(np.stack(data[:, 0])).to(self.device)  # Current state
-        action = torch.FloatTensor(np.stack(data[:, 1])).to(self.device)  # Action taken
-        extrinsic_reward = torch.FloatTensor(np.stack(data[:, 2])).to(self.device)  # Extrinsic reward
-        next_state = torch.FloatTensor(np.stack(data[:, 3])).to(self.device)  # Next state
-        not_done = torch.FloatTensor(~np.stack(data[:, 4])).to(self.device)  # Done flag (inverted)
+        state = torch.FloatTensor(np.stack(data[:, 0])).to(device=self.device)  # Current state
+        action = torch.FloatTensor(np.stack(data[:, 1])).to(device=self.device)   # Action taken
+        extrinsic_reward = torch.FloatTensor(np.stack(data[:, 2])).to(device=self.device)   # Extrinsic reward
+        next_state = torch.FloatTensor(np.stack(data[:, 3])).to(device=self.device)   # Next state
+        not_done = torch.FloatTensor(~np.stack(data[:, 4])).to(device=self.device)   # Done flag (inverted)
 
         # Update normalization stats during training (for RND)
         self.obs_mean.data = 0.99 * self.obs_mean + 0.01 * next_state.mean(dim=0)
