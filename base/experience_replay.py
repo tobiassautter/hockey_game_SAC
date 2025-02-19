@@ -33,6 +33,15 @@ class ExperienceReplay:
             buffer.add_transition(t)
 
         return buffer
+    
+    @staticmethod
+    def clone_buffer_per(new_buffer, maxsize, alpha, beta):
+        old_transitions = deepcopy(new_buffer._transitions)
+        buffer = PrioritizedExperienceReplay(max_size=maxsize, alpha=alpha, beta=beta)
+        for t in old_transitions:
+            buffer.add_transition(t)
+
+        return buffer
 
     def add_transition(self, transitions_new):
         if self.size == 0:
@@ -95,7 +104,7 @@ class PrioritizedExperienceReplay(ExperienceReplay):
     - Sampling Probability: P(i) = (p_i^α) / Σ_k (p_k^α)
     - Importance Sampling Weight: w_i = ( (N * P(i)) ^ (-β) ) / max(w)
     """
-    def __init__(self, max_size, alpha, beta, epsilon=1e-5):
+    def __init__(self, max_size, alpha, beta, epsilon=3e-3):
         super(PrioritizedExperienceReplay, self).__init__(max_size)
         self._alpha = alpha
         self._beta_start = beta  # Initial beta value

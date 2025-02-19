@@ -80,8 +80,7 @@ class SACTrainer:
 
                 touched = max(touched, _info['reward_touch_puck'])
 
-                agent_x, agent_y, puck_x, puck_y = utils.get_agent_puck_positions(ob)
-                def_reward = utils.compute_defensive_reward(agent_x, agent_y, puck_x, puck_y)
+                def_reward = utils.compute_defensive_reward(ob)
 
                 if self._config.get('sparse', False):
                     if done:
@@ -96,10 +95,10 @@ class SACTrainer:
                 else:
                     step_reward = (
                         reward
-                        # + 3 * _info['reward_closeness_to_puck']
+                        + 2.5 * _info['reward_closeness_to_puck']
                         - (1 - touched) * 0.1
                         + touched * first_time_touch * 0.1 * step
-                        + def_reward * 0.75 # 0.5 # added defensive reward
+                        + def_reward * 0.8 # 0.5 # added defensive reward
                         + env.winner * 8 # 8 # added winner reward as too defensive
                     )
                 
@@ -108,7 +107,7 @@ class SACTrainer:
                 intrinsic_reward = agent.compute_intrinsic_reward(next_state_tensor).item()
 
                 # if in first 5 steps set reward to 0
-                if episode_counter < 5:
+                if episode_counter < 3:
                     intrinsic_reward = 0
                     step_reward = 0
 

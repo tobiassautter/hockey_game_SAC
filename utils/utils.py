@@ -6,8 +6,101 @@ import shutil
 from tabulate import tabulate
 import random
 from copy import deepcopy
-from hockey.hockey_env import CENTER_X, CENTER_Y, SCALE, W
+from hockey.hockey_env import CENTER_X, CENTER_Y, SCALE, W, H, HockeyEnv, Mode
 import os
+from scipy.spatial import distance as euclidean_distance
+import gymnasium as gym
+class EnvWrapper(gym.Wrapper):
+    def _init_(self, config=None, random_init=False):
+        env = HockeyEnv(mode=Mode.NORMAL)
+        super()._init_(env)
+        self.env = env
+        self.config = config
+        
+    def reset(self, seed = None):
+        if seed is None:
+            seed = np.random.randint(0, 1e10)
+        obs1, _ = self.env.reset(seed=seed)
+        obs2 = self.env.obs_agent_two()
+        return obs1, obs2
+
+    def step(self, action):
+        obs1, reward, done, _, info = self.env.step(action)
+        obs2 = self.env.obs_agent_two()
+        reward = info['winner']
+        trunc = done
+        done = np.abs(info['winner'])
+        reward = info['winner']
+        return obs1, obs2, reward, done, trunc
+      
+    @staticmethod
+    def augment(observation: np.ndarray, config) -> np.ndarray:
+        observation_augmented = np.empty(config.env.obs_augmentation_dim)
+        observation_augmented[: observation.shape[0]] = observation
+
+        player_1 = observation[0:2]
+        player_2 = observation[6:8]
+        puck = observation[12:14]
+        goal_1 = np.array([W / 2 - 250 / SCALE, H / 2])
+        goal_2 = np.array([W / 2 + 250 / SCALE, H / 2])
+
+        # Augment by adding distances
+        observation_augmented[18] = euclidean_distance(player_1, player_2)
+        observation_augmented[19] = euclidean_distance(player_1, puck)
+        observation_augmented[20] = euclidean_distance(player_2, puck)
+        observation_augmented[21] = euclidean_distance(player_1, goal_1)
+        observation_augmented[22] = euclidean_distance(player_1, goal_2)
+        observation_augmented[23] = euclidean_distance(player_2, goal_1)
+        observation_augmented[24] = euclidean_distance(player_2, goal_2)
+        observation_augmented[25] = euclidean_distance(puck, goal_1)
+        observation_augmented[26] = euclidean_distance(puck, goal_2)
+
+        return observation_augmented
+
+
+# Puck trajectory prediction
+def set_state(self, state):
+    """ function to revert the state of the environment to a previous state (observation)"""
+    self.player1.position = (state[[0, 1]] + [CENTER_X, CENTER_Y]).tolist()
+    self.player1.angle = state[2]
+    self.player1.linearVelocity = [state[3], state[4]]
+    self.player1.angularVelocity = state[5]
+    self.player2.position = (state[[6, 7]] + [CENTER_X, CENTER_Y]).tolist()
+    self.player2.angle = state[8]
+    self.player2.linearVelocity = [state[9], state[10]]
+    self.player2.angularVelocity = state[11]
+    self.puck.position = (state[[12, 13]] + [CENTER_X, CENTER_Y]).tolist()
+    self.puck.linearVelocity = [state[14], state[15]]
+    self.player1_has_puck = state[16]
+    self.player2_has_puck = state[17]
+
+
+@staticmethod
+def forecast_puck_trajectory(input_obs, n_steps, frame_skip):
+    env = EnvWrapper()
+    env.reset()
+    env.env.set_state(input_obs)
+    env.env.player1.linearVelocity=(0, 0)
+    env.env.player2.linearVelocity=(0, 0)
+    possession1 = input_obs[16] > 0
+    possession2 = input_obs[17] > 0
+    if possession1:
+        action = [0, 0, 0, 1, 0, 0, 0, 0]
+    elif possession2:
+        action = [0, 0, 0, 0, 0, 0, 0, 1]
+    elif env.env.puck.linearVelocity[0] == env.env.puck.linearVelocity[1] == 0:
+        return np.array([(input_obs[12], input_obs[13]) * n_steps]).flatten()
+    else:
+        action = [0, 0, 0, 0, 0, 0, 0, 0]
+    trajectory = []
+    for i in range(n_steps * frame_skip):
+        obs1, obs2, reward, done, trunc = env.step(action)
+    if i % frame_skip == 0:
+        trajectory.append(obs1[12])
+        trajectory.append(obs1[13])
+
+    return np.array(trajectory).flatten()
+
 
 # Helper functions for the hockey environment
 def get_agent_puck_positions(obs):
@@ -20,99 +113,100 @@ def get_agent_puck_positions(obs):
         puck_x (float): X-coordinate of the puck.
         puck_y (float): Y-coordinate of the puck.
     """
-    # Positions are relative to center (CENTER_X, CENTER_Y)
     agent_x = obs[0] + CENTER_X
     agent_y = obs[1] + CENTER_Y
-    puck_x = obs[14] + CENTER_X
-    puck_y = obs[15] + CENTER_Y
-    return agent_x, agent_y, puck_x, puck_y
+    # Correct indices based on environment structure:
+    puck_x = obs[12] + CENTER_X  # Position X
+    puck_y = obs[13] + CENTER_Y  # Position Y
+    puck_vx = obs[14]            # Velocity X
+    puck_vy = obs[15]            # Velocity Y
+    return agent_x, agent_y, puck_x, puck_y, puck_vx, puck_vy
 
-# def compute_defensive_reward(agent_x, agent_y, puck_x, puck_y, env_width=W):
-#     """Computes sparse rewards for defensive positioning and puck proximity.
-#     Args:
-#         agent_x (float): Agent's X-coordinate.
-#         puck_x (float): Puck's X-coordinate.
-#         puck_y (float): Puck's Y-coordinate.
-#         env_width (float): Total width of the environment.
-#     Returns:
-#         step_reward (float): Sparse reward component.
-#     """
-#     step_reward = 0.0
+
+def predict_puck_position(obs, steps=2, damping=0.97):
+    """
+    Predict puck position using simple physics model with velocity damping
+    Returns: (pred_x, pred_y) in absolute coordinates
+    """
+    _, _, puck_x, puck_y, vx, vy = get_agent_puck_positions(obs)
     
-#     # Reward defensive positioning (agent in left half)
-#     if agent_x < CENTER_X:
-#         step_reward += 0.5  # Base reward for staying in defensive zone
+    pred_x, pred_y = puck_x, puck_y
+    current_vx, current_vy = vx, vy
     
-#     # Extra reward if near the goal area (leftmost 20% of the rink)
-#     if agent_x < 0.2 * env_width:
-#         step_reward += 0.3 * 10
-    
-#     # Penalize over-aggressiveness (crossing to opponent's half)
-#     if agent_x > CENTER_X + 0.2 * env_width:
-#         step_reward -= 0.2 * 10
-    
-#     # Reward puck interception (if puck is in defensive zone)
-#     if puck_x < CENTER_X:
-#         puck_dist = np.sqrt((agent_x - puck_x)**2 + (agent_y - puck_y)**2)
-#         if puck_dist < 0.1 * env_width:  # Close to puck
-#             step_reward += 0.4
-    
-#     return step_reward
-def compute_defensive_reward(agent_x, agent_y, puck_x, puck_y):
+    for _ in range(steps):
+        # Apply damping to velocity
+        current_vx *= damping
+        current_vy *= damping
+        
+        # Update position
+        pred_x += current_vx
+        pred_y += current_vy
+        
+    return pred_x, pred_y
+
+
+def compute_defensive_reward(obs):
     """Computes sparse rewards for defensive positioning relative to goal area."""
     step_reward = 0.0
+
+    agent_x, agent_y, puck_x, puck_y, vx, vy = get_agent_puck_positions(obs)
+    pred_x, pred_y = predict_puck_position(obs)
     
-    # Goal is at left side: (CENTER_X - 245/SCALE, CENTER_Y)
-    goal_x = CENTER_X - 245/SCALE
+    # Calculate key positions
+    goal_x = CENTER_X - 210/SCALE #245
     goal_y = CENTER_Y
+    current_dist_to_goal = np.sqrt((agent_x - goal_x)**2 + (agent_y - goal_y)**2)
     
-    # Calculate distances
-    dist_to_goal = np.sqrt((agent_x - goal_x)**2 + (agent_y - goal_y)**2)
-    dist_to_puck = np.sqrt((agent_x - puck_x)**2 + (agent_y - puck_y)**2)
+    # Calculate distances to predicted puck trajectory
+    dist_to_current_puck = np.sqrt((agent_x - puck_x)**2 + (agent_y - puck_y)**2)
+    dist_to_future_puck = np.sqrt((agent_x - pred_x)**2 + (agent_y - pred_y)**2)
     
-    # # Might changing centre/puck migt be better than agent
-    # # Reward for staying near goal center (both X and Y)
-    # if agent_x < CENTER_X - 50/SCALE:  # In defensive half
-    #     # Base positioning reward (stronger near goal center)
-    #     goal_proximity = 1 - min(dist_to_goal / (250/SCALE), 1)
-    #     step_reward += goal_proximity * 0.35
-        
-    #     # Extra reward for being between puck and goal when puck is in defensive zone
-    #     if puck_x < CENTER_X:
-    #         # Use similar distance scaling as original closeness reward
-    #         max_dist = 250/SCALE
-    #         puck_proximity_factor = 1 - min(dist_to_puck/max_dist, 1)
-    #         step_reward += puck_proximity_factor * 0.2
-            
-    #         # Penalize being far from puck in defensive zone (mirror original negative reward)
-    #         step_reward -= (dist_to_puck/max_dist) * 0.1
-
-    # # Penalize leaving defensive position unnecessarily
-    # if agent_x > CENTER_X - 75/SCALE:  # Too far in middle line
-    #     step_reward -= 0.1
+    step_reward = 0.0
     
-    # Might changing centre/puck migt be better than agent
-    # Reward for staying near goal center (both X and Y)
-    if puck_x > CENTER_X:  # In offensive half
-        # Base positioning reward (stronger near goal center)
-        goal_proximity = 1 - min(dist_to_goal / (250/SCALE), 1)
-        step_reward += goal_proximity * 0.5
+    # Base positioning reward
+    if puck_x > CENTER_X:  # Puck in offensive zone
+        goal_proximity = 1 - min(current_dist_to_goal / (250/SCALE), 1)
+        step_reward += goal_proximity * 0.5 
         
-    # Extra reward for being between puck and goal when puck is in defensive zone
-    if puck_x < CENTER_X:
-        # Use similar distance scaling as original closeness reward
-        max_dist = 250/SCALE
-        puck_proximity_factor = 1 - min(dist_to_puck/max_dist, 1)
-        step_reward += puck_proximity_factor * 0.2
+    # Future puck interception bonus
+    if pred_x < CENTER_X:  # Puck entering defensive zone
+        future_puck_proximity = 1 - min(dist_to_future_puck / (300/SCALE), 1)
+        step_reward += future_puck_proximity * 0.3 
         
-        # Penalize being far from puck in defensive zone (mirror original negative reward)
-        step_reward -= (dist_to_puck/max_dist) * 0.1
-
-    # Penalize leaving defensive position unnecessarily when enemy is on other side
-    if ( puck_x > CENTER_X and agent_x > CENTER_X - 100/SCALE):  # Too far in middle line
+    # Penalty for ignoring puck trajectory
+    if dist_to_future_puck > 150/SCALE and pred_x < CENTER_X:
+        step_reward -= 0.2 
+        
+    # Existing defensive positioning logic
+    if (puck_x > CENTER_X and agent_x > CENTER_X - 75/SCALE):
         step_reward -= 0.1
 
     return step_reward
+
+
+
+    # # Might changing centre/puck migt be better than agent
+    # # Reward for staying near goal center (both X and Y)
+    # if puck_x > CENTER_X:  # In offensive half
+    #     # Base positioning reward (stronger near goal center)
+    #     goal_proximity = 1 - min(dist_to_goal / (250/SCALE), 1)
+    #     step_reward += goal_proximity * 0.5
+        
+    # # Extra reward for being between puck and goal when puck is in defensive zone
+    # if puck_x < CENTER_X:
+    #     # Use similar distance scaling as original closeness reward
+    #     max_dist = 250/SCALE
+    #     puck_proximity_factor = 1 - min(dist_to_puck/max_dist, 1)
+    #     step_reward += puck_proximity_factor * 0.2
+        
+    #     # Penalize being far from puck in defensive zone (mirror original negative reward)
+    #     step_reward -= (dist_to_puck/max_dist) * 0.1
+
+    # # Penalize leaving defensive position unnecessarily when enemy is on other side
+    # if ( puck_x > CENTER_X and agent_x > CENTER_X - 100/SCALE):  # Too far in middle line
+    #     step_reward -= 0.1
+
+    # return step_reward
 
 # clean empty data folders
 def clean_empty_dirs(data_path):

@@ -12,6 +12,8 @@ from models import *
 from utils.utils import hard_update, soft_update
 from base.experience_replay import UniformExperienceReplay, PrioritizedExperienceReplay
 
+# USING BASE SCRIPTS FROM 1. PLACE 2021 COMPETITION
+# https://github.com/anticdimi/laser-hockey 
 
 class SACAgent(Agent):
     """
@@ -61,6 +63,16 @@ class SACAgent(Agent):
 
         lr_milestones = [int(x) for x in (self._config['lr_milestones'][0]).split(' ')]
 
+        # Create dictonairy from passed AdamW config adamw_eps, adamw_weight_decay
+        # and pass it to the networks
+        if self._config['adamw']:
+            dict_adamw = {
+                'eps': self._config['adamw_eps'],
+                'weight_decay': self._config['adamw_weight_decay']
+            }
+        else:
+            dict_adamw = None
+
         self.actor = ActorNetwork(
             input_dims=obs_dim,
             learning_rate=self._config['learning_rate'],
@@ -68,7 +80,8 @@ class SACAgent(Agent):
             hidden_sizes=[256, 256],
             lr_milestones=lr_milestones,
             lr_factor=self._config['lr_factor'],
-            device=self._config['device']
+            device=self._config['device'],
+            dict_adamw=dict_adamw
         ).to(self.device) # doppelt haelt besser
 
         self.critic = CriticNetwork(
@@ -78,7 +91,8 @@ class SACAgent(Agent):
             hidden_sizes=[256, 256],
             lr_milestones=lr_milestones,
             lr_factor=self._config['lr_factor'],
-            device=self._config['device']
+            device=self._config['device'],
+            dict_adamw=dict_adamw
         ).to(self.device) # doppelt haelt besser
  
         self.critic_target = CriticNetwork(
@@ -87,7 +101,8 @@ class SACAgent(Agent):
             learning_rate=self._config['learning_rate'],
             hidden_sizes=[256, 256],
             lr_milestones=lr_milestones,
-            device=self._config['device']
+            device=self._config['device'],
+            dict_adamw=dict_adamw
         ).to(self.device) # doppelt haelt besser
 
         # Added RND Networks structures
@@ -105,15 +120,23 @@ class SACAgent(Agent):
             device=self._config['device']
         ).to(self.device)
 
-        # RND optimizer
-        self.rnd_optimizer = torch.optim.AdamW(
-            self.rnd_predictor.parameters(),
-            lr=userconfig['rnd_lr'],  # Add this hyperparameter to config
-            weight_decay=1e-6
-        )
+        # RND optimizer, check if adamw config is set, else use adam
+        if self._config['adamw']:
+            self.rnd_optimizer = torch.optim.AdamW(
+                self.rnd_predictor.parameters(),
+                lr=userconfig['rnd_lr'],
+                weight_decay=self._config['adamw_weight_decay'],
+                eps=self._config['adamw_eps']
+            )
+        else:
+            self.rnd_optimizer = torch.optim.Adam(
+                self.rnd_predictor.parameters(),
+                lr=userconfig['rnd_lr'], 
+            )
+
 
         # Intrinsic reward weight
-        self.beta = userconfig['beta']  # Add this hyperparameter to config
+        self.beta = userconfig['beta']
         # Added decay so less random movement in later training stages
         self.beta_start = 1.0  # Initial beta (match your config)
         self.beta_end = 0.1    # Final beta after decay
@@ -135,12 +158,18 @@ class SACAgent(Agent):
             
             self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
             
-            # self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=self._config['alpha_lr'])
-
-            self.alpha_optim = torch.optim.AdamW([self.log_alpha], 
-                                                 lr=self._config['alpha_lr'],
-                                                weight_decay=1e-6
-                                                )
+            # Check if adamw config is set, else use adam
+            if self._config['adamw']:
+                self.alpha_optim = torch.optim.AdamW([self.log_alpha], 
+                                                     lr=self._config['alpha_lr'],
+                                                    weight_decay=self._config['adamw_weight_decay'],
+                                                    eps=self._config['adamw_eps']
+                                                    )
+            else:
+                self.alpha_optim = torch.optim.Adam([self.log_alpha],
+                                                     lr=self._config['alpha_lr']
+                                                    )
+ 
             
             self.alpha_scheduler = torch.optim.lr_scheduler.MultiStepLR(
                 self.alpha_optim, milestones=milestones, gamma=0.5

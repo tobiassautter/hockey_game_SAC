@@ -15,6 +15,9 @@ import random
 from utils.utils import *
 from base.experience_replay import ExperienceReplay
 
+# USING BASE SCRIPTS FROM 1. PLACE 2021 COMPETITION
+# https://github.com/anticdimi/laser-hockey 
+
 parser = ArgumentParser()
 parser.add_argument('--dry-run', help='Set if running only for sanity check', action='store_true')
 parser.add_argument('--cuda', help='Set if want to train on graphic card', action='store_true')
@@ -32,7 +35,7 @@ parser.add_argument('--eval_episodes', help='Set number of evaluation episodes',
 parser.add_argument('--evaluate_every',
                     help='# of episodes between evaluating agent during the training', type=int, default=500) #1000
 parser.add_argument('--add_self_every',
-                    help='# of gradient updates between adding agent (self) to opponent list', type=int, default=2000)#1001)#100000)
+                    help='# of gradient updates between adding agent (self) to opponent list', type=int, default=2001)#1001)#100000)
 parser.add_argument('--learning_rate', help='Learning rate', type=float, default=1e-3) #1e-3)
 parser.add_argument('--alpha_lr', help='Learning rate', type=float, default=1e-5) #1e-4) 
 parser.add_argument('--lr_factor', help='Scale learning rate by', type=float, default=0.5)
@@ -66,6 +69,10 @@ parser.add_argument('--sparse', type=bool, default=False, help='Train with spars
 # train against pretrained agents only
 parser.add_argument('--pretrained', type=bool, default=False, help='Train against pretrained agents only')
 
+# Use adam or adamW and adamW params
+parser.add_argument('--adamw', type=bool, default=True, help='Use AdamW optimizer')
+parser.add_argument('--adamw_eps', type=float, default=1e-6, help='AdamW epsilon')
+parser.add_argument('--adamw_weight_decay', type=float, default=1e-6, help='AdamW weight decay')
 
 opts = parser.parse_args()
 
@@ -111,15 +118,15 @@ if __name__ == '__main__':
 
     # Add absolute paths for pretrained agents
     pretrained_agents = [
-        "sac/all_agents/i-agent.pkl", 
+        "sac/all_agents/k-agent.pkl",
+        "sac/all_agents/i4-agent.pkl", 
         "sac/all_agents/g-agent.pkl", 
-        "sac/all_agents/f2-agent.pkl", 
-        "sac/all_agents/e-agent.pkl"
+        "sac/all_agents/e-agent.pkl", 
+        "sac/all_agents/d-agent.pkl"
         ]
     
     # Set up the pretrained agents
     if opts.pretrained:
-        opponents = [h_env.BasicOpponent(weak=False)]
         for p in pretrained_agents:
             a = SACAgent.load_model(p)
             a.eval()
@@ -141,9 +148,12 @@ if __name__ == '__main__':
         )
     else:
         agent = SACAgent.load_model(opts.preload_path)
-        agent.buffer = ExperienceReplay.clone_buffer(agent.buffer, 1000000)
+        if opts.per:
+            agent.buffer = ExperienceReplay.clone_buffer_per(agent.buffer, 1000000, opts.per_alpha, opts.per_beta)
+        else:
+            agent.buffer = ExperienceReplay.clone_buffer(agent.buffer, 1000000)
 
-        agent.buffer.preload_transitions(opts.transitions_path)
+        #agent.buffer.preload_transitions(opts.transitions_path)
         agent.train()
 
 
