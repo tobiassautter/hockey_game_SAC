@@ -129,8 +129,14 @@ class ActorNetwork(Feedforward):
 
         return mu, log_sigma
 
-    def sample(self, state):
+    def sample(self, state, deterministic=False):
         mu, log_sigma = self.forward(state)
+        if deterministic:
+            # Compute the deterministic action (using the mean)
+            deterministic_action = torch.tanh(mu) * self.action_scale + self.action_bias
+            # Return a tuple with the deterministic action in the first and third positions.
+            return deterministic_action, None, deterministic_action, None
+        
         sigma = log_sigma.exp()
         normal = Normal(mu, sigma)
 

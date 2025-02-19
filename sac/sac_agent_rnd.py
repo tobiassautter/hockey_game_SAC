@@ -12,8 +12,17 @@ from models import *
 from utils.utils import hard_update, soft_update
 from base.experience_replay import UniformExperienceReplay, PrioritizedExperienceReplay
 
+from collections import deque
+import random
+
 # USING BASE SCRIPTS FROM 1. PLACE 2021 COMPETITION
 # https://github.com/anticdimi/laser-hockey 
+
+# Further Improvements: 
+# AdamW: https://doi.org/10.1007/978-3-031-33374-3_26
+# Prioritized Experience Replay: https://arxiv.org/pdf/1511.05952
+# Improved Entropy Tuning META-SAC: https://arxiv.org/pdf/2007.01932
+# RND: https://arxiv.org/pdf/1810.12894.pdf
 
 class SACAgent(Agent):
     """
@@ -42,7 +51,10 @@ class SACAgent(Agent):
         self.device = userconfig['device']
         self.alpha = userconfig['alpha']
         self.automatic_entropy_tuning = self._config['automatic_entropy_tuning']
+        self.meta_tuning = self._config['meta_tuning']
         self.eval_mode = False
+        # inital state buffer
+        self.initial_state_buffer = deque(maxlen=1000)
 
         # Check for prio buffer
         # Initialize replay buffer based on --per flag
@@ -73,7 +85,7 @@ class SACAgent(Agent):
         else:
             dict_adamw = None
         
-        print(f"Using AdamW optimizer: {dict_adamw}")
+        # rint(f"Using AdamW optimizer: {dict_adamw}")
 
         self.actor = ActorNetwork(
             input_dims=obs_dim,
@@ -176,6 +188,49 @@ class SACAgent(Agent):
             self.alpha_scheduler = torch.optim.lr_scheduler.MultiStepLR(
                 self.alpha_optim, milestones=milestones, gamma=0.5
             )
+
+        # self meta entropy tuning
+        if self.meta_tuning:
+            # Change to Meta-SAC style parameterization
+            self.log_alpha = torch.tensor([0.0], requires_grad=True, device=self.device)
+            self.alpha = self.log_alpha.exp()
+            
+            # Meta-SAC optimizer (use separate optimizer)
+            if dict_adamw is not None:
+                self.alpha_optim = torch.optim.AdamW([self.log_alpha], 
+                                                     lr=self._config['alpha_lr'],
+                                                    weight_decay=dict_adamw['weight_decay'],
+                                                    eps=dict_adamw['eps']
+                                                    )
+            else:
+                self.alpha_optim = torch.optim.Adam([self.log_alpha],
+                                                     lr=self._config['alpha_lr']
+                                                    )
+
+    # For meta tuning
+    def store_initial_state(self, state):
+        """Call this during training when resetting env"""
+        self.initial_state_buffer.append(state.copy())
+
+    # compute meta loss
+    def compute_meta_loss(self):
+        """Meta-SAC's novel meta loss calculation"""
+        if len(self.initial_state_buffer) < self._config['batch_size']:
+            return None
+            
+        # Sample initial states
+        states_np = np.stack(self.initial_state_buffer, axis=0)  # Stack into a single array
+        states = random.sample(states_np.tolist(), self._config['batch_size'])
+        states = torch.FloatTensor(states, device=self.device)
+
+        # Get deterministic policy actions
+        with torch.no_grad():
+            actions = self.actor.sample(states, deterministic=True)[2]
+
+        # Compute Q-values with current critic
+        q1, _ = self.critic(states, actions)
+        return -q1.mean()
+
 
     @classmethod
     def clone_from(cls, agent):
@@ -321,7 +376,8 @@ class SACAgent(Agent):
 
         # Update actor network
         self.actor.optimizer.zero_grad()  # Clear gradients
-        policy_loss.backward()  # Backpropagate policy loss
+        #policy_loss.backward()  # Backpropagate policy loss
+        policy_loss.backward(retain_graph=True) # Fix for RuntimeError: Trying to backward through the graph a second time
         self.actor.optimizer.step()  # Update actor weights
 
         # Step 6: Adjust entropy coefficient (if automatic entropy tuning is enabled)

@@ -56,6 +56,8 @@ class SACTrainer:
         while episode_counter <= self._config['max_episodes']:
             ob, info = env.reset()
             obs_agent2 = env.obs_agent_two()
+            # meta initial state
+            agent.store_initial_state(ob)
 
             total_reward, touched = 0, 0
             touch_stats[episode_counter] = 0
@@ -96,10 +98,10 @@ class SACTrainer:
                     step_reward = (
                         reward
                         + 2.5 * _info['reward_closeness_to_puck']
-                        - (1 - touched) * 0.1
+                        - (1 - touched) * 0.01
                         + touched * first_time_touch * 0.1 * step
-                        + def_reward * 0.8 # 0.5 # added defensive reward
-                        + env.winner * 8 # 8 # added winner reward as too defensive
+                        + def_reward * 0.25 # 0.5 # added defensive reward
+                        + env.winner * 10 # 8 # added winner reward as too defensive
                     )
                 
                 # Always compute intrinsic reward (RND stays active)
@@ -137,6 +139,15 @@ class SACTrainer:
             # Update beta after each episode
             if isinstance(agent.buffer, PrioritizedExperienceReplay):
                 agent.buffer.update_beta(total_step_counter, total_steps)
+
+            # Update meta regularizer
+            if agent.meta_tuning:
+                # Meta-SAC alpha update
+                meta_loss = agent.compute_meta_loss()
+                if meta_loss is not None:
+                    agent.alpha_optim.zero_grad()
+                    meta_loss.backward(retain_graph=True)
+                    agent.alpha_optim.step()
 
             if agent.buffer.size < self._config['batch_size']:
                 continue
