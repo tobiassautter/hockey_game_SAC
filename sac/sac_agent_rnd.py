@@ -65,13 +65,15 @@ class SACAgent(Agent):
 
         # Create dictonairy from passed AdamW config adamw_eps, adamw_weight_decay
         # and pass it to the networks
-        if self._config['adamw']:
+        if self._config.get('adamw', True):
             dict_adamw = {
-                'eps': self._config['adamw_eps'],
-                'weight_decay': self._config['adamw_weight_decay']
+                'eps':self._config.get('adamw_eps', 1e-6),
+                'weight_decay': self._config.get('adamw_weight_decay', 1e-6)
             }
         else:
             dict_adamw = None
+        
+        print(f"Using AdamW optimizer: {dict_adamw}")
 
         self.actor = ActorNetwork(
             input_dims=obs_dim,
@@ -121,12 +123,12 @@ class SACAgent(Agent):
         ).to(self.device)
 
         # RND optimizer, check if adamw config is set, else use adam
-        if self._config['adamw']:
+        if dict_adamw is not None:
             self.rnd_optimizer = torch.optim.AdamW(
                 self.rnd_predictor.parameters(),
                 lr=userconfig['rnd_lr'],
-                weight_decay=self._config['adamw_weight_decay'],
-                eps=self._config['adamw_eps']
+                weight_decay=dict_adamw['weight_decay'],
+                eps=dict_adamw['eps']
             )
         else:
             self.rnd_optimizer = torch.optim.Adam(
@@ -159,11 +161,11 @@ class SACAgent(Agent):
             self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
             
             # Check if adamw config is set, else use adam
-            if self._config['adamw']:
+            if dict_adamw is not None:
                 self.alpha_optim = torch.optim.AdamW([self.log_alpha], 
                                                      lr=self._config['alpha_lr'],
-                                                    weight_decay=self._config['adamw_weight_decay'],
-                                                    eps=self._config['adamw_eps']
+                                                    weight_decay=dict_adamw['weight_decay'],
+                                                    eps=dict_adamw['eps']
                                                     )
             else:
                 self.alpha_optim = torch.optim.Adam([self.log_alpha],

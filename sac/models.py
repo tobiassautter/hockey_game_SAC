@@ -8,15 +8,19 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 from base.network import Feedforward
 
+# USING BASE SCRIPTS FROM 1. PLACE 2021 COMPETITION
+# https://github.com/anticdimi/laser-hockey 
 
+#Works well with SAC and AdamW : https://doi.org/10.1007/978-3-031-33374-3_26
 def weights_init_(m):
     if isinstance(m, nn.Linear):
-        nn.init.xavier_uniform_(m.weight) #, gain=1) #Works well with SAC and AdamW : https://doi.org/10.1007/978-3-031-33374-3_26
+        nn.init.xavier_uniform_(m.weight) #, gain=1) 
         nn.init.constant_(m.bias, 0)
 
 
 class CriticNetwork(nn.Module):
-    def __init__(self, input_dim, n_actions, learning_rate, device, lr_milestones, lr_factor=0.5, loss='l2', hidden_sizes=[256, 256]):
+    def __init__(self, input_dim, n_actions, learning_rate, device, lr_milestones,
+                  lr_factor=0.5, loss='l2', hidden_sizes=[256, 256], dict_adamw=None):
         super(CriticNetwork, self).__init__()
         self.device = device
         layer_sizes = [input_dim[0] + n_actions] + hidden_sizes + [1]
@@ -31,8 +35,16 @@ class CriticNetwork(nn.Module):
 
         if device.type == 'cuda':
             self.cuda()
-        #self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
-        self.optimizer = torch.optim.AdamW(self.parameters(), lr=learning_rate)
+        
+        # set optimizer to AdamW else to adam
+        if dict_adamw is not None: # adamw_weight_decay adamw_eps
+            self.optimizer = torch.optim.AdamW(self.parameters(), 
+                                               lr=learning_rate,
+                                               weight_decay=dict_adamw['weight_decay'],
+                                               eps=dict_adamw['eps']
+                                               )
+        else:
+            self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, eps=0.000001)
 
         self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
             self.optimizer, milestones=lr_milestones, gamma=lr_factor
@@ -63,7 +75,7 @@ class CriticNetwork(nn.Module):
 # Gaussian policy
 class ActorNetwork(Feedforward):
     def __init__(self, input_dims, learning_rate, device, lr_milestones, lr_factor=0.5,
-                 action_space=None, hidden_sizes=[256, 256], reparam_noise=1e-6):
+                 action_space=None, hidden_sizes=[256, 256], reparam_noise=1e-6, dict_adamw=None):
         super().__init__(
             input_size=input_dims[0],
             hidden_sizes=hidden_sizes,
@@ -80,11 +92,15 @@ class ActorNetwork(Feedforward):
 
         self.learning_rate = learning_rate
         
-        #self.optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, eps=0.000001)
-        self.optimizer = torch.optim.AdamW(self.parameters(), 
-                                            lr=self.learning_rate,
-                                            eps=0.000001
-                                            )
+        # set optimizer to AdamW else to adam
+        if dict_adamw is not None: # adamw_weight_decay adamw_eps
+            self.optimizer = torch.optim.AdamW(self.parameters(),
+                                               lr=learning_rate,
+                                               weight_decay=dict_adamw['weight_decay'],
+                                               eps=dict_adamw['eps']
+                                               )
+        else:
+            self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, eps=0.000001)
 
         self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
             self.optimizer, milestones=lr_milestones, gamma=lr_factor
@@ -132,9 +148,9 @@ class ActorNetwork(Feedforward):
 
         return action, log_prob, mu, sigma
     
+
 # Added from : https://arxiv.org/pdf/1810.12894
 # Exploration via Random Network Distillation
-
 class RNDNetwork(nn.Module):
     """Random Network Distillation (RND) network."""
     def __init__(self, input_dim, hidden_sizes=[256, 256], output_dim=128, device='cpu'):
