@@ -26,7 +26,7 @@ class SACTrainer:
         self._config = config
 
     def train(self, agent, opponents, env, run_evaluation):
-        rew_stats, q1_losses, q2_losses, actor_losses, alpha_losses = [], [], [], [], []
+        rew_stats, q1_losses, q2_losses, actor_losses, alpha_losses, alpha_stats = [], [], [], [], [], []
 
         lost_stats, touch_stats, won_stats = {}, {}, {}
         eval_stats = {
@@ -54,7 +54,8 @@ class SACTrainer:
         grad_updates = 0
         new_op_grad = []
         while episode_counter <= self._config['max_episodes']:
-            ob, info = env.reset()
+            seed=episode_counter
+            ob, info = env.reset(seed=seed) # seed test
             obs_agent2 = env.obs_agent_two()
             # meta initial state
             agent.store_initial_state(ob)
@@ -97,19 +98,29 @@ class SACTrainer:
                 else:
                     step_reward = (
                         reward
-                        + 2.5 * _info['reward_closeness_to_puck']
-                        - (1 - touched) * 0.01
+                        + 5 * _info['reward_closeness_to_puck']
+                        - (1 - touched) * 0.1
                         + touched * first_time_touch * 0.1 * step
-                        + def_reward * 0.25 # 0.5 # added defensive reward
-                        + env.winner * 10 # 8 # added winner reward as too defensive
                     )
+
+                    # # if env winner is 0, step reward -0.1
+                    # step_reward = (
+                    #     reward * 0.05
+                    #     #+ 0.25 * _info['reward_closeness_to_puck']
+                    #     - (1 - touched) * 0.1
+                    #     + touched * first_time_touch * 0.1 * step
+                    #     + def_reward * 0.03 # 0.5 # added defensive reward
+                    #     + env.winner * 4 # 8 # added winner reward as too defensive
+                    #     #- 0.25 # time for no goal
+                    #     + (env.winner == 0) * -0.01 # added penalty for draw
+                    # )
                 
                 # Always compute intrinsic reward (RND stays active)
                 next_state_tensor = torch.as_tensor(next_state, dtype=torch.float32, device=agent.device).unsqueeze(0)
                 intrinsic_reward = agent.compute_intrinsic_reward(next_state_tensor).item()
 
                 # if in first 5 steps set reward to 0
-                if episode_counter < 3:
+                if episode_counter < 10:
                     intrinsic_reward = 0
                     step_reward = 0
 
@@ -140,24 +151,13 @@ class SACTrainer:
             if isinstance(agent.buffer, PrioritizedExperienceReplay):
                 agent.buffer.update_beta(total_step_counter, total_steps)
 
-            # Update meta regularizer
-            if agent.meta_tuning:
-                # Meta-SAC alpha update
-                meta_loss = agent.compute_meta_loss()
-                if meta_loss is not None:
-                    agent.alpha_optim.zero_grad()
-                    meta_loss.backward(retain_graph=True)
-                    agent.alpha_optim.step()
-                    # Save the meta loss for logging
-                    agent.last_meta_loss = meta_loss.item()
-                else:
-                    agent.last_meta_loss = 0.0
 
             if agent.buffer.size < self._config['batch_size']:
                 continue
 
             for _ in range(self._config['grad_steps']):
                 losses = agent.update_parameters(total_step_counter)
+
                 grad_updates += 1
 
                 q1_losses.append(losses[0])
@@ -176,7 +176,11 @@ class SACTrainer:
                         new_op_grad.append(grad_updates)
 
             agent.schedulers_step()
-            self.logger.print_episode_info(env.winner, episode_counter, step, total_reward)
+
+            # Log alpha value                
+            alpha_value = losses[5]  # Assuming losses[5] is the alpha value
+            alpha_stats.append(alpha_value)
+            self.logger.print_episode_info(env.winner, episode_counter, step, total_reward, alpha=alpha_value)
 
             if episode_counter % self._config['evaluate_every'] == 0:
                 agent.eval()
@@ -224,6 +228,14 @@ class SACTrainer:
         # Plot evaluation stats
         self.logger.plot_evaluation_stats(eval_stats, self._config['evaluate_every'], 'evaluation-won-lost.pdf')
 
+        # Plot alpha valies
+        self.logger.plot_running_mean(
+            data=alpha_stats,
+            title='Alpha Value',
+            filename='alpha.pdf',
+            show=False,
+            window=50
+        )
         # Plot losses
         for loss, title in zip([q1_losses, q2_losses, actor_losses, alpha_losses],
                                ['Q1 loss', 'Q2 loss', 'Policy loss', 'Alpha loss']):

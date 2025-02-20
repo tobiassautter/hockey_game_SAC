@@ -196,7 +196,7 @@ def compute_defensive_reward(obs, current_step):
     dist_to_puck = np.sqrt((agent_x - puck_x)**2 + (agent_y - puck_y)**2)
     dist_to_goal = np.sqrt((agent_x - closest_goal_point[0])**2 + (agent_y - closest_goal_point[1])**2)
     dist_puck_to_goal = np.sqrt((puck_x - closest_goal_point[0])**2 + (puck_y - closest_goal_point[1])**2)
-    print("Distance Agent to Puck: ", dist_to_puck, "Distance Agent to Goal: ", dist_to_goal, "Distance Puck to Goal: ", dist_puck_to_goal)
+   # print("Distance Agent to Puck: ", dist_to_puck, "Distance Agent to Goal: ", dist_to_goal, "Distance Puck to Goal: ", dist_puck_to_goal)
     
     # speed puck
     puck_velocity = np.array([vx, vy])
@@ -207,40 +207,46 @@ def compute_defensive_reward(obs, current_step):
     puck_to_goal = np.array([closest_goal_point[0] - puck_x, closest_goal_point[1] - puck_y])
     puck_to_goal_norm = normalize_vector(puck_to_goal)
 
+    # if agent 1 has puck and agent2 has puck
     agent_has_puck = obs[16] > 0
+    agent2_has_puck = obs[17] > 0
 
     # Check dot product of puck velocity and goal-to-puck vector
     alignment_puck_goal = np.dot(puck_to_goal, puck_velocity_norm)
     # Compute alignment: if close to -1, agent is directly between puck and goal
     agent_from_puck = np.array([agent_x - puck_x, agent_y - puck_y])
     alignment_agent = np.dot(normalize_vector(agent_from_puck), puck_to_goal_norm)
+
+    # Define a maximum distance beyond which the proximity reward is zero
+    max_puck_distance = 500 / SCALE  # adjust this threshold as needed
+    # Calculate a normalized proximity factor (closer = higher value)
+    puck_proximity = 1 - min(dist_puck_to_goal / max_puck_distance, 1)
+    # Reward more when the puck is closer to the goal, weighted by its speed
+    puck_proximity *= puck_speed
+    goal_proximity = 1 - min(dist_to_goal / (250/SCALE), 1)
+
+    if puck_x > CENTER_X:  # Puck in offensive zone
+        # goal proximit reward
+        step_reward += goal_proximity * puck_proximity * 0.05
+    if agent2_has_puck and alignment_agent > 0.35:
+        step_reward += goal_proximity * 0.25
     
     if alignment_puck_goal > 0.25 and not agent_has_puck :  # Puck flying towards goal and agent doesnt have puck
-        # Define a maximum distance beyond which the proximity reward is zero
-        max_puck_distance = 500 / SCALE  # adjust this threshold as needed
-        # Calculate a normalized proximity factor (closer = higher value)
-        puck_proximity = 1 - min(dist_puck_to_goal / max_puck_distance, 1)
-        # Reward more when the puck is closer to the goal, weighted by its speed
-        puck_proximity *= puck_speed
-
-        # goal proximit reward
-        goal_proximity = 1 - min(dist_to_goal / (250/SCALE), 1)
-        step_reward += goal_proximity * puck_proximity * 0.15
-        #print("Puck flying towards goal, reward for goal proximity: ", step_reward)
-
-        if alignment_agent > 0.95:
-            step_reward += 0.3 * puck_speed  # strong reward for perfect blocking, bonus for fast move
-            print("PERFEKT:                  ", step_reward)
+        if alignment_agent > 0.9:
+            step_reward += 0.4 * puck_speed * alignment_agent  # strong reward for perfect blocking, bonus for fast move
+            #print("PERFEKT:                  ", step_reward)
             # print puck pos, agent pos, and alignment in one listing
             #print("Puck pos: ", puck_x, puck_y, "Agent pos: ", agent_x, agent_y, "Alignment: ", alignment_agent)
-        if alignment_agent < 0.75:
-            step_reward += 0.1  * puck_speed # partial reward for perfect blocking
-            print("PARTIAL:          ", step_reward)
+        if alignment_agent > 0.75 and alignment_agent < 0.9:
+            step_reward += 0.2  * puck_speed # partial reward for perfect blocking
+            #print("PARTIAL:          ", step_reward)
         # Minus reward for not blocking
         else:
-            step_reward -= 0.2 * puck_proximity
-            print("NOT: ", step_reward)
+            step_reward -= 0.3 * puck_speed
+            #print("NOT: ", step_reward)
 
+    # max reward between -10 and 10
+    step_reward = np.clip(step_reward, -10, 5)
     return step_reward
 
 def compute_defensive_reward_orig(obs):
@@ -443,22 +449,35 @@ class Logger:
             pickle.dump(model, outp, pickle.HIGHEST_PROTOCOL)
 
     def print_episode_info(self, game_outcome, episode_counter, step, total_reward, epsilon=None, touched=None,
-                           opponent=None):
+                           opponent=None, alpha=None):
         if not self.quiet:
+            # Base message components
             padding = 8 if game_outcome == 0 else 0
-            msg_string = '{} {:>4}: Done after {:>3} steps. \tReward: {:<15}'.format(
-                " " * padding, episode_counter, step + 1, round(total_reward, 4))
+            base_msg = (
+                f"{' ' * padding}{episode_counter:>4}: "
+                f"Done after {step + 1:>3} steps. "
+                f"\tReward: {total_reward:<8.4f}"
+            )
 
+            # Add alpha if present
+            if alpha is not None:
+                base_msg += f"  Alpha: {alpha:<6.4f}"
+
+            # Additional information components
+            additional_info = []
             if touched is not None:
-                msg_string = '{}Touched: {:<15}'.format(msg_string, int(touched))
-
+                additional_info.append(f"Touched: {int(touched)}")
             if epsilon is not None:
-                msg_string = '{}Eps: {:<5}'.format(msg_string, round(epsilon, 2))
-
+                additional_info.append(f"Eps: {epsilon:.2f}")
             if opponent is not None:
-                msg_string = '{}\tOpp: {}'.format(msg_string, opponent)
+                additional_info.append(f"Opp: {opponent}")
 
-            print(msg_string)
+            # Combine all parts
+            full_msg = base_msg
+            if additional_info:
+                full_msg += "\t" + "  ".join(additional_info)
+
+            print(full_msg)
 
     def print_stats(self, rew_stats, touch_stats, won_stats, lost_stats):
         if not self.quiet:

@@ -17,6 +17,23 @@ def weights_init_(m):
         nn.init.xavier_uniform_(m.weight) #, gain=1) 
         nn.init.constant_(m.bias, 0)
 
+    # set last layer weights to zero
+    if isinstance(m, nn.Linear) and m.out_features == 1:
+        nn.init.zeros_(m.weight)
+        nn.init.zeros_(m.bias)
+    
+def _initialize_weights(self):
+    if not self.config.architecture.critic_custom_init:
+        return
+    for m in self.reg_net.modules():
+        if isinstance(m, nn.Linear):
+            if m.out_features == 1:  # Last layer
+                torch.nn.init.zeros_(m.weight)
+                torch.nn.init.zeros_(m.bias)
+            else:  # Other layers
+                torch.nn.init.kaiming_uniform_(m.weight, nonlinearity='leaky_relu' if self.config.architecture.activation_function == "LeakyReLU" else "relu")
+                if m.bias is not None:
+                    torch.nn.init.zeros_(m.bias)
 
 class CriticNetwork(nn.Module):
     def __init__(self, input_dim, n_actions, learning_rate, device, lr_milestones,
@@ -46,8 +63,12 @@ class CriticNetwork(nn.Module):
         else:
             self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, eps=0.000001)
 
-        self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            self.optimizer, milestones=lr_milestones, gamma=lr_factor
+
+        # if parm, use multistep or exponential scheduler
+        if lr_milestones is None:
+            self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.995) 
+        else:    
+            self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=lr_milestones, gamma=lr_factor
         )
 
         if loss == 'l2':
@@ -102,9 +123,11 @@ class ActorNetwork(Feedforward):
         else:
             self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, eps=0.000001)
 
-        self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            self.optimizer, milestones=lr_milestones, gamma=lr_factor
-        )
+        # if parm, use multistep or exponential scheduler
+        if lr_milestones is None:
+            self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.995)
+        else:
+            self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=lr_milestones, gamma=lr_factor)
 
         if self.action_space is not None:
             self.action_scale = torch.FloatTensor(

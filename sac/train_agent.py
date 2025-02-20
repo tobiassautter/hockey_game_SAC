@@ -31,18 +31,18 @@ parser.add_argument('--transitions_path', help='Path to the root of folder conta
 # Training params
 parser.add_argument('--max_episodes', help='Max episodes for training', type=int, default=5000) #5000
 parser.add_argument('--max_steps', help='Max steps for training', type=int, default=250)
-parser.add_argument('--eval_episodes', help='Set number of evaluation episodes', type=int, default=30)
+parser.add_argument('--eval_episodes', help='Set number of evaluation episodes', type=int, default=50)
 parser.add_argument('--evaluate_every',
                     help='# of episodes between evaluating agent during the training', type=int, default=500) #1000
 parser.add_argument('--add_self_every',
-                    help='# of gradient updates between adding agent (self) to opponent list', type=int, default=2001)#1001)#100000)
-parser.add_argument('--learning_rate', help='Learning rate', type=float, default=1e-3) #1e-3)
+                    help='# of gradient updates between adding agent (self) to opponent list', type=int, default=5500)#1001)#100000)
+parser.add_argument('--learning_rate', help='Learning rate', type=float, default=1e-4) #1e-3)
 parser.add_argument('--alpha_lr', help='Learning rate', type=float, default=1e-5) #1e-4) #For meta : 3e-4
 parser.add_argument('--lr_factor', help='Scale learning rate by', type=float, default=0.5)
 parser.add_argument('--lr_milestones', help='Learning rate milestones', nargs='+')
 parser.add_argument('--alpha_milestones', help='Learning rate milestones', nargs='+')
 parser.add_argument('--update_target_every', help='# of steps between updating target net', type=int, default=1)
-parser.add_argument('--gamma', help='Discount', type=float, default=0.95)
+parser.add_argument('--gamma', help='Discount', type=float, default=0.98) #0.95)
 parser.add_argument('--batch_size', help='batch_size', type=int, default=128) #128
 parser.add_argument('--grad_steps', help='grad_steps', type=int, default=32)
 parser.add_argument('--alpha', type=float, default=0.2, help='Temperature parameter alpha determines the relative importance of the entropy term against the reward')
@@ -123,9 +123,9 @@ if __name__ == '__main__':
     pretrained_agents = [
         "sac/all_agents/k-agent.pkl",
         "sac/all_agents/i4-agent.pkl", 
-        "sac/all_agents/g-agent.pkl", 
-        "sac/all_agents/e-agent.pkl", 
-        "sac/all_agents/d-agent.pkl"
+        #"sac/all_agents/g-agent.pkl", 
+        #"sac/all_agents/e-agent.pkl", 
+        #"sac/all_agents/d-agent.pkl"
         ]
     
     # Set up the pretrained agents
