@@ -148,6 +148,8 @@ class SACAgent(Agent):
                 lr=userconfig['rnd_lr'], 
             )
 
+        # RND scheduler
+        self.rnd_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.rnd_optimizer, gamma=0.9999)
 
         # Intrinsic reward weight
         self.beta = userconfig['beta']
@@ -206,6 +208,11 @@ class SACAgent(Agent):
                 self.alpha_optim = torch.optim.Adam([self.log_alpha],
                                                      lr=self._config['alpha_lr']
                                                     )
+                
+            # Meta-SAC scheduler exponential decay
+            self.alpha_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                self.alpha_optim, gamma=0.9999
+            )
 
     # For meta tuning
     def store_initial_state(self, state):
@@ -283,6 +290,20 @@ class SACAgent(Agent):
     def schedulers_step(self):
         self.critic.lr_scheduler.step()
         self.actor.lr_scheduler.step()
+
+        # If using entropy tuning, step its scheduler
+        if self.automatic_entropy_tuning and hasattr(self, 'alpha_scheduler'):
+            self.alpha_scheduler.step()
+
+        # If using Meta-Tuning, also step its scheduler
+        if self.meta_tuning and hasattr(self, 'alpha_scheduler'):
+            self.alpha_scheduler.step()
+
+
+        # If RND predictor exists and has a scheduler, step it
+        if hasattr(self, 'rnd_optimizer') and hasattr(self, 'rnd_scheduler'):
+            self.rnd_scheduler.step()
+
 
     # Added rnd intrinsic reward
     def compute_intrinsic_reward(self, obs):
@@ -390,7 +411,14 @@ class SACAgent(Agent):
             alpha_loss.backward()  # Backpropagate entropy loss
             self.alpha_optim.step()  # Update entropy coefficient
             self.alpha = self.log_alpha.exp()  # Update alpha value
-
+            computed_alpha_loss = alpha_loss.item()
+        
+        elif self.meta_tuning:
+            # Use the stored meta loss if available; otherwise, default to 0.0
+            computed_alpha_loss = self.last_meta_loss if hasattr(self, "last_meta_loss") else 0.0
+        else:
+            computed_alpha_loss = 0.0
+        
         # Step 7: Soft update the target critic networks
         if total_step % self._config['update_target_every'] == 0:
             soft_update(self.critic_target, self.critic, self._config['soft_tau'])
@@ -400,6 +428,6 @@ class SACAgent(Agent):
             qf1_loss.item(),  # Q1 loss
             qf2_loss.item(),  # Q2 loss
             policy_loss.item(),  # Policy loss
-            alpha_loss.item() if self.automatic_entropy_tuning else 0.0,  # Entropy loss
+            computed_alpha_loss,   # Alpha (meta) loss
             rnd_loss.item()  # RND loss
         )

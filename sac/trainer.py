@@ -82,7 +82,7 @@ class SACTrainer:
 
                 touched = max(touched, _info['reward_touch_puck'])
 
-                def_reward = utils.compute_defensive_reward(ob)
+                def_reward = utils.compute_defensive_reward(ob, step)
 
                 if self._config.get('sparse', False):
                     if done:
@@ -148,6 +148,10 @@ class SACTrainer:
                     agent.alpha_optim.zero_grad()
                     meta_loss.backward(retain_graph=True)
                     agent.alpha_optim.step()
+                    # Save the meta loss for logging
+                    agent.last_meta_loss = meta_loss.item()
+                else:
+                    agent.last_meta_loss = 0.0
 
             if agent.buffer.size < self._config['batch_size']:
                 continue

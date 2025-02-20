@@ -6,100 +6,100 @@ import shutil
 from tabulate import tabulate
 import random
 from copy import deepcopy
-from hockey.hockey_env import CENTER_X, CENTER_Y, SCALE, W, H, HockeyEnv, Mode
+from hockey.hockey_env import CENTER_X, CENTER_Y, SCALE, W, H, HockeyEnv, Mode, GOAL_SIZE
 import os
 from scipy.spatial import distance as euclidean_distance
 import gymnasium as gym
-class EnvWrapper(gym.Wrapper):
-    def _init_(self, config=None, random_init=False):
-        env = HockeyEnv(mode=Mode.NORMAL)
-        super()._init_(env)
-        self.env = env
-        self.config = config
+# class EnvWrapper(gym.Wrapper):
+#     def _init_(self, config=None, random_init=False):
+#         env = HockeyEnv(mode=Mode.NORMAL)
+#         super()._init_(env)
+#         self.env = env
+#         self.config = config
         
-    def reset(self, seed = None):
-        if seed is None:
-            seed = np.random.randint(0, 1e10)
-        obs1, _ = self.env.reset(seed=seed)
-        obs2 = self.env.obs_agent_two()
-        return obs1, obs2
+#     def reset(self, seed = None):
+#         if seed is None:
+#             seed = np.random.randint(0, 1e10)
+#         obs1, _ = self.env.reset(seed=seed)
+#         obs2 = self.env.obs_agent_two()
+#         return obs1, obs2
 
-    def step(self, action):
-        obs1, reward, done, _, info = self.env.step(action)
-        obs2 = self.env.obs_agent_two()
-        reward = info['winner']
-        trunc = done
-        done = np.abs(info['winner'])
-        reward = info['winner']
-        return obs1, obs2, reward, done, trunc
+#     def step(self, action):
+#         obs1, reward, done, _, info = self.env.step(action)
+#         obs2 = self.env.obs_agent_two()
+#         reward = info['winner']
+#         trunc = done
+#         done = np.abs(info['winner'])
+#         reward = info['winner']
+#         return obs1, obs2, reward, done, trunc
       
-    @staticmethod
-    def augment(observation: np.ndarray, config) -> np.ndarray:
-        observation_augmented = np.empty(config.env.obs_augmentation_dim)
-        observation_augmented[: observation.shape[0]] = observation
+#     @staticmethod
+#     def augment(observation: np.ndarray, config) -> np.ndarray:
+#         observation_augmented = np.empty(config.env.obs_augmentation_dim)
+#         observation_augmented[: observation.shape[0]] = observation
 
-        player_1 = observation[0:2]
-        player_2 = observation[6:8]
-        puck = observation[12:14]
-        goal_1 = np.array([W / 2 - 250 / SCALE, H / 2])
-        goal_2 = np.array([W / 2 + 250 / SCALE, H / 2])
+#         player_1 = observation[0:2]
+#         player_2 = observation[6:8]
+#         puck = observation[12:14]
+#         goal_1 = np.array([W / 2 - 250 / SCALE, H / 2])
+#         goal_2 = np.array([W / 2 + 250 / SCALE, H / 2])
 
-        # Augment by adding distances
-        observation_augmented[18] = euclidean_distance(player_1, player_2)
-        observation_augmented[19] = euclidean_distance(player_1, puck)
-        observation_augmented[20] = euclidean_distance(player_2, puck)
-        observation_augmented[21] = euclidean_distance(player_1, goal_1)
-        observation_augmented[22] = euclidean_distance(player_1, goal_2)
-        observation_augmented[23] = euclidean_distance(player_2, goal_1)
-        observation_augmented[24] = euclidean_distance(player_2, goal_2)
-        observation_augmented[25] = euclidean_distance(puck, goal_1)
-        observation_augmented[26] = euclidean_distance(puck, goal_2)
+#         # Augment by adding distances
+#         observation_augmented[18] = euclidean_distance(player_1, player_2)
+#         observation_augmented[19] = euclidean_distance(player_1, puck)
+#         observation_augmented[20] = euclidean_distance(player_2, puck)
+#         observation_augmented[21] = euclidean_distance(player_1, goal_1)
+#         observation_augmented[22] = euclidean_distance(player_1, goal_2)
+#         observation_augmented[23] = euclidean_distance(player_2, goal_1)
+#         observation_augmented[24] = euclidean_distance(player_2, goal_2)
+#         observation_augmented[25] = euclidean_distance(puck, goal_1)
+#         observation_augmented[26] = euclidean_distance(puck, goal_2)
 
-        return observation_augmented
-
-
-# Puck trajectory prediction
-def set_state(self, state):
-    """ function to revert the state of the environment to a previous state (observation)"""
-    self.player1.position = (state[[0, 1]] + [CENTER_X, CENTER_Y]).tolist()
-    self.player1.angle = state[2]
-    self.player1.linearVelocity = [state[3], state[4]]
-    self.player1.angularVelocity = state[5]
-    self.player2.position = (state[[6, 7]] + [CENTER_X, CENTER_Y]).tolist()
-    self.player2.angle = state[8]
-    self.player2.linearVelocity = [state[9], state[10]]
-    self.player2.angularVelocity = state[11]
-    self.puck.position = (state[[12, 13]] + [CENTER_X, CENTER_Y]).tolist()
-    self.puck.linearVelocity = [state[14], state[15]]
-    self.player1_has_puck = state[16]
-    self.player2_has_puck = state[17]
+#         return observation_augmented
 
 
-@staticmethod
-def forecast_puck_trajectory(input_obs, n_steps, frame_skip):
-    env = EnvWrapper()
-    env.reset()
-    env.env.set_state(input_obs)
-    env.env.player1.linearVelocity=(0, 0)
-    env.env.player2.linearVelocity=(0, 0)
-    possession1 = input_obs[16] > 0
-    possession2 = input_obs[17] > 0
-    if possession1:
-        action = [0, 0, 0, 1, 0, 0, 0, 0]
-    elif possession2:
-        action = [0, 0, 0, 0, 0, 0, 0, 1]
-    elif env.env.puck.linearVelocity[0] == env.env.puck.linearVelocity[1] == 0:
-        return np.array([(input_obs[12], input_obs[13]) * n_steps]).flatten()
-    else:
-        action = [0, 0, 0, 0, 0, 0, 0, 0]
-    trajectory = []
-    for i in range(n_steps * frame_skip):
-        obs1, obs2, reward, done, trunc = env.step(action)
-    if i % frame_skip == 0:
-        trajectory.append(obs1[12])
-        trajectory.append(obs1[13])
+# # Puck trajectory prediction
+# def set_state(self, state):
+#     """ function to revert the state of the environment to a previous state (observation)"""
+#     self.player1.position = (state[[0, 1]] + [CENTER_X, CENTER_Y]).tolist()
+#     self.player1.angle = state[2]
+#     self.player1.linearVelocity = [state[3], state[4]]
+#     self.player1.angularVelocity = state[5]
+#     self.player2.position = (state[[6, 7]] + [CENTER_X, CENTER_Y]).tolist()
+#     self.player2.angle = state[8]
+#     self.player2.linearVelocity = [state[9], state[10]]
+#     self.player2.angularVelocity = state[11]
+#     self.puck.position = (state[[12, 13]] + [CENTER_X, CENTER_Y]).tolist()
+#     self.puck.linearVelocity = [state[14], state[15]]
+#     self.player1_has_puck = state[16]
+#     self.player2_has_puck = state[17]
 
-    return np.array(trajectory).flatten()
+
+# @staticmethod
+# def forecast_puck_trajectory(input_obs, n_steps, frame_skip):
+#     env = EnvWrapper()
+#     env.reset()
+#     env.env.set_state(input_obs)
+#     env.env.player1.linearVelocity=(0, 0)
+#     env.env.player2.linearVelocity=(0, 0)
+#     possession1 = input_obs[16] > 0
+#     possession2 = input_obs[17] > 0
+#     if possession1:
+#         action = [0, 0, 0, 1, 0, 0, 0, 0]
+#     elif possession2:
+#         action = [0, 0, 0, 0, 0, 0, 0, 1]
+#     elif env.env.puck.linearVelocity[0] == env.env.puck.linearVelocity[1] == 0:
+#         return np.array([(input_obs[12], input_obs[13]) * n_steps]).flatten()
+#     else:
+#         action = [0, 0, 0, 0, 0, 0, 0, 0]
+#     trajectory = []
+#     for i in range(n_steps * frame_skip):
+#         obs1, obs2, reward, done, trunc = env.step(action)
+#     if i % frame_skip == 0:
+#         trajectory.append(obs1[12])
+#         trajectory.append(obs1[13])
+
+#     return np.array(trajectory).flatten()
 
 
 # Helper functions for the hockey environment
@@ -144,8 +144,106 @@ def predict_puck_position(obs, steps=2, damping=0.97):
         
     return pred_x, pred_y
 
+def speed(v):
+    """Calculates the speed of a 2D vector."""
+    return np.linalg.norm(v)
 
-def compute_defensive_reward(obs):
+def normalize_vector(v):
+    """Normalizes a 2D vector."""
+    norm = speed(v)
+    if norm == 0:
+        return v
+    return v / norm
+
+# 0  x pos player one
+# 1  y pos player one
+# 2  angle player one
+# 3  x vel player one
+# 4  y vel player one
+# 5  angular vel player one
+# 6  x player two
+# 7  y player two
+# 8  angle player two
+# 9 y vel player two
+# 10 y vel player two
+# 11 angular vel player two
+# 12 x pos puck
+# 13 y pos puck
+# 14 x vel puck
+# 15 y vel puck
+# Keep Puck Mode
+# 16 time left player has puck
+# 17 time left other player has puck
+
+def compute_defensive_reward(obs, current_step):
+    """Computes sparse rewards for defensive positioning relative to goal area."""
+    step_reward = 0.0
+    agent_x, agent_y, puck_x, puck_y, vx, vy = get_agent_puck_positions(obs)
+    # goal is polygon so we need to get closest points 
+    # Compute the front face x coordinate of player1's goal.
+    goal_front_x = CENTER_X - 245/SCALE
+    # Define the vertical boundaries of the goal opening.
+    goal_top_y = (CENTER_Y + GOAL_SIZE/SCALE)  # cirlcle to rectangle
+    goal_bottom_y = (CENTER_Y - GOAL_SIZE/SCALE)  # cirlcle to rectangle 
+
+    # Clamp the puck's y coordinate to the goal's vertical range.
+    closest_goal_y = min(max(puck_y, goal_bottom_y), goal_top_y)
+    # The closest point on the goal's front face:
+    closest_goal_point = np.array([goal_front_x, closest_goal_y])
+
+
+    # dist to puck and dist to goal
+    dist_to_puck = np.sqrt((agent_x - puck_x)**2 + (agent_y - puck_y)**2)
+    dist_to_goal = np.sqrt((agent_x - closest_goal_point[0])**2 + (agent_y - closest_goal_point[1])**2)
+    dist_puck_to_goal = np.sqrt((puck_x - closest_goal_point[0])**2 + (puck_y - closest_goal_point[1])**2)
+    print("Distance Agent to Puck: ", dist_to_puck, "Distance Agent to Goal: ", dist_to_goal, "Distance Puck to Goal: ", dist_puck_to_goal)
+    
+    # speed puck
+    puck_velocity = np.array([vx, vy])
+    puck_speed = speed(puck_velocity)
+    puck_velocity_norm = normalize_vector(puck_velocity)
+
+    # Calculate vectors for positioning
+    puck_to_goal = np.array([closest_goal_point[0] - puck_x, closest_goal_point[1] - puck_y])
+    puck_to_goal_norm = normalize_vector(puck_to_goal)
+
+    agent_has_puck = obs[16] > 0
+
+    # Check dot product of puck velocity and goal-to-puck vector
+    alignment_puck_goal = np.dot(puck_to_goal, puck_velocity_norm)
+    # Compute alignment: if close to -1, agent is directly between puck and goal
+    agent_from_puck = np.array([agent_x - puck_x, agent_y - puck_y])
+    alignment_agent = np.dot(normalize_vector(agent_from_puck), puck_to_goal_norm)
+    
+    if alignment_puck_goal > 0.25 and not agent_has_puck :  # Puck flying towards goal and agent doesnt have puck
+        # Define a maximum distance beyond which the proximity reward is zero
+        max_puck_distance = 500 / SCALE  # adjust this threshold as needed
+        # Calculate a normalized proximity factor (closer = higher value)
+        puck_proximity = 1 - min(dist_puck_to_goal / max_puck_distance, 1)
+        # Reward more when the puck is closer to the goal, weighted by its speed
+        puck_proximity *= puck_speed
+
+        # goal proximit reward
+        goal_proximity = 1 - min(dist_to_goal / (250/SCALE), 1)
+        step_reward += goal_proximity * puck_proximity * 0.15
+        #print("Puck flying towards goal, reward for goal proximity: ", step_reward)
+
+        if alignment_agent > 0.95:
+            step_reward += 0.3 * puck_speed  # strong reward for perfect blocking, bonus for fast move
+            print("PERFEKT:                  ", step_reward)
+            # print puck pos, agent pos, and alignment in one listing
+            #print("Puck pos: ", puck_x, puck_y, "Agent pos: ", agent_x, agent_y, "Alignment: ", alignment_agent)
+        if alignment_agent < 0.75:
+            step_reward += 0.1  * puck_speed # partial reward for perfect blocking
+            print("PARTIAL:          ", step_reward)
+        # Minus reward for not blocking
+        else:
+            step_reward -= 0.2 * puck_proximity
+            print("NOT: ", step_reward)
+
+    return step_reward
+
+def compute_defensive_reward_orig(obs):
     """Computes sparse rewards for defensive positioning relative to goal area."""
     step_reward = 0.0
 
@@ -387,9 +485,9 @@ class Logger:
             plt.show()
         plt.close()
 
-    def plot_running_mean(self, data, title, filename=None, show=True, v_milestones=None):
+    def plot_running_mean(self, data, title, filename=None, show=True, v_milestones=None, window=250):
         data_np = np.asarray(data)
-        mean = running_mean(data_np, 1000)
+        mean = running_mean(data_np, window)
         self._plot(mean, title, filename, show)
 
     def plot_evaluation_stats(self, data, eval_freq, filename):
