@@ -96,24 +96,24 @@ class SACTrainer:
                         # if touched > 0:
                         #     step_reward += 0.2
                 else:
-                    step_reward = (
-                        reward
-                        + 5 * _info['reward_closeness_to_puck']
-                        - (1 - touched) * 0.1
-                        + touched * first_time_touch * 0.1 * step
-                    )
-
-                    # # if env winner is 0, step reward -0.1
                     # step_reward = (
-                    #     reward * 0.05
-                    #     #+ 0.25 * _info['reward_closeness_to_puck']
+                    #     reward
+                    #     + 5 * _info['reward_closeness_to_puck']
                     #     - (1 - touched) * 0.1
                     #     + touched * first_time_touch * 0.1 * step
-                    #     + def_reward * 0.03 # 0.5 # added defensive reward
-                    #     + env.winner * 4 # 8 # added winner reward as too defensive
-                    #     #- 0.25 # time for no goal
-                    #     + (env.winner == 0) * -0.01 # added penalty for draw
                     # )
+
+                    # if env winner is 0, step reward -0.1
+                    step_reward = (
+                        reward * 0.1
+                        #+ 0.25 * _info['reward_closeness_to_puck']
+                        - (1 - touched) * 0.1
+                        + touched * first_time_touch * 0.1 * step
+                        + def_reward * 0.05 # 0.5 # added defensive reward
+                        + env.winner * 5 # 8 # added winner reward as too defensive
+                        #- 0.25 # time for no goal
+                        + (env.winner == 0) * -0.01 # added penalty for draw
+                    )
                 
                 # Always compute intrinsic reward (RND stays active)
                 next_state_tensor = torch.as_tensor(next_state, dtype=torch.float32, device=agent.device).unsqueeze(0)

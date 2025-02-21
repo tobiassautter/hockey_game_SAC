@@ -107,7 +107,8 @@ class SACAgent(Agent):
             lr_milestones=lr_milestones,
             lr_factor=self._config['lr_factor'],
             device=self._config['device'],
-            dict_adamw=dict_adamw
+            dict_adamw=dict_adamw,
+            config=self._config
         ).to(self.device) # doppelt haelt besser
  
         self.critic_target = CriticNetwork(
@@ -117,7 +118,8 @@ class SACAgent(Agent):
             hidden_sizes=[256, 256],
             lr_milestones=lr_milestones,
             device=self._config['device'],
-            dict_adamw=dict_adamw
+            dict_adamw=dict_adamw,
+            config=self._config
         ).to(self.device) # doppelt haelt besser
 
         # Added RND Networks structures
@@ -226,6 +228,11 @@ class SACAgent(Agent):
             self.alpha_scheduler = torch.optim.lr_scheduler.ExponentialLR(
                 self.alpha_optim, gamma=0.9995
             )
+    
+    def normalize(self, x):
+        normalized = (x - self.obs_mean) / (self.obs_std + 1e-8)
+        return torch.clamp(normalized, -5, 5)
+
 
     # For meta tuning
     def store_initial_state(self, state):
@@ -242,9 +249,8 @@ class SACAgent(Agent):
         states = random.sample(self.initial_state_buffer, self._config['batch_size'])
         states = torch.tensor(np.array(states), dtype=torch.float32, device=self.device)
 
-        # Get deterministic policy actions
-
-        actions = self.actor.sample(states, deterministic=True)[2]
+        normalized_states = self.normalize(states) 
+        actions = self.actor.sample(normalized_states, deterministic=True)[2]  # Use normalized
 
         # Compute Q-values with current critic
         q1, _ = self.critic(states, actions)
@@ -291,12 +297,13 @@ class SACAgent(Agent):
         
         # Create the PyTorch tensor efficiently
         state = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+        normalized_state = self.normalize(state)
         
         #state = torch.FloatTensor(obs).to(self.actor.device).unsqueeze(0) #orig
         if evaluate is False:
-            action, _, _, _ = self.actor.sample(state)
+            action, _, _, _ = self.actor.sample(normalized_state)
         else:
-            _, _, action, _ = self.actor.sample(state)
+            _, _, action, _ = self.actor.sample(normalized_state)
         return action.detach().cpu().numpy()[0]
 
     def schedulers_step(self):
@@ -320,8 +327,7 @@ class SACAgent(Agent):
     # Added rnd intrinsic reward
     def compute_intrinsic_reward(self, obs):
         """Calculate intrinsic reward as MSE between target and predictor outputs."""
-        normalized_obs = (obs - self.obs_mean) / (self.obs_std + 1e-8) # Whiten input
-        normalized_obs = torch.clamp(normalized_obs, -5, 5) # Clip to prevent NaNs
+        normalized_obs = self.normalize(obs)
 
         with torch.no_grad():
             target = self.rnd_target(normalized_obs)
@@ -365,22 +371,28 @@ class SACAgent(Agent):
         # Decay beta for less random movement
         # self.beta = max(self.beta_end, self.beta * self.beta_decay)
 
+        # normalize inputs
+        normalized_state = self.normalize(state)
+        normalized_next_state = self.normalize(next_state)
+
         # Step 3: Train the RND predictor network
         self.rnd_optimizer.zero_grad()  # Clear gradients
-        predictor = self.rnd_predictor(next_state)  # Predictor output
+        predictor = self.rnd_predictor(normalized_next_state)  # Predictor output
         with torch.no_grad():
-            target = self.rnd_target(next_state)  # Target output (fixed)
+            target = self.rnd_target(normalized_next_state)  # Target output (fixed)
         rnd_loss = F.mse_loss(predictor, target)  # MSE loss for RND
         rnd_loss.backward()  # Backpropagate RND loss
         self.rnd_optimizer.step()  # Update RND predictor weights
 
+
+
         # Step 4: Update the SAC critic networks
         with torch.no_grad():
             # Sample next action and compute its log probability
-            next_state_action, next_state_log_pi, _, _ = self.actor.sample(next_state)
+            next_state_action, next_state_log_pi, _, _ = self.actor.sample(normalized_next_state)
             
             # Compute target Q-values using the target critic networks
-            q1_next_targ, q2_next_targ = self.critic_target(next_state, next_state_action)
+            q1_next_targ, q2_next_targ = self.critic_target(normalized_next_state, next_state_action)
             
             # Use the minimum Q-value for stability (clipped double Q-learning)
             min_qf_next_target = torch.min(q1_next_targ, q2_next_targ) - self.alpha * next_state_log_pi
@@ -389,7 +401,7 @@ class SACAgent(Agent):
             #next_q_value = next_q_value.unsqueeze(1)  # Fix shape mismatch
 
         # Compute current Q-values
-        qf1, qf2 = self.critic(state, action)  # Shape: [batch_size, 1]
+        qf1, qf2 = self.critic(normalized_state, action)  # Shape: [batch_size, 1]
 
         # Compute critic losses
         qf1_loss = self.critic.loss(qf1, next_q_value)
@@ -402,8 +414,8 @@ class SACAgent(Agent):
         self.critic.optimizer.step()  # Update critic weights
 
         # Step 5: Update the SAC actor network
-        pi, log_pi, _, _ = self.actor.sample(state)  # Sample action and compute log probability
-        qf1_pi, qf2_pi = self.critic(state, pi)  # Compute Q-values for the sampled action
+        pi, log_pi, _, _ = self.actor.sample(normalized_state)  # Sample action and compute log probability
+        qf1_pi, qf2_pi = self.critic(normalized_state, pi)  # Compute Q-values for the sampled action
         min_qf_pi = torch.min(qf1_pi, qf2_pi)  # Use the minimum Q-value for stability
         
         # Compute policy loss (maximize Q-value and entropy)

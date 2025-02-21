@@ -22,31 +22,20 @@ def weights_init_(m):
         nn.init.zeros_(m.weight)
         nn.init.zeros_(m.bias)
     
-def _initialize_weights(self):
-    if not self.config.architecture.critic_custom_init:
-        return
-    for m in self.reg_net.modules():
-        if isinstance(m, nn.Linear):
-            if m.out_features == 1:  # Last layer
-                torch.nn.init.zeros_(m.weight)
-                torch.nn.init.zeros_(m.bias)
-            else:  # Other layers
-                torch.nn.init.kaiming_uniform_(m.weight, nonlinearity='leaky_relu' if self.config.architecture.activation_function == "LeakyReLU" else "relu")
-                if m.bias is not None:
-                    torch.nn.init.zeros_(m.bias)
 
 class CriticNetwork(nn.Module):
-    def __init__(self, input_dim, n_actions, learning_rate, device, lr_milestones,
+    def __init__(self, input_dim, n_actions, learning_rate, device, lr_milestones, config,
                   lr_factor=0.5, loss='l2', hidden_sizes=[256, 256], dict_adamw=None):
         super(CriticNetwork, self).__init__()
         self.device = device
+        self.config = config  # Pass config to access initialization settings
+
         layer_sizes = [input_dim[0] + n_actions] + hidden_sizes + [1]
 
-        # Q1 architecture
-        self.q1_layers = nn.ModuleList([nn.Linear(i, o) for i, o in zip(layer_sizes[:-1], layer_sizes[1:])])
-
-        # Q2 architecture
-        self.q2_layers = nn.ModuleList([nn.Linear(i, o) for i, o in zip(layer_sizes[:-1], layer_sizes[1:])])
+        # Q1 architecture with LayerNorm
+        self.q1_layers = self._build_network(layer_sizes)
+        # Q2 architecture with LayerNorm
+        self.q2_layers = self._build_network(layer_sizes)
 
         self.apply(weights_init_)
 
@@ -77,30 +66,47 @@ class CriticNetwork(nn.Module):
             self.loss = nn.SmoothL1Loss(reduction='mean')
         else:
             raise ValueError(f'Unkown loss function name: {loss}')
+        
+    def _build_network(self, layer_sizes):
+        layers = []
+        prev_size = layer_sizes[0]
+        for size in layer_sizes[1:-1]:  # Exclude input and output layers
+            layers.append(nn.Linear(prev_size, size))
+            layers.append(nn.LayerNorm(size))
+            layers.append(nn.ReLU())
+            prev_size = size
+        # Output layer (no LayerNorm or activation)
+        layers.append(nn.Linear(prev_size, layer_sizes[-1]))
+        return nn.Sequential(*layers)
+    
+    def _initialize_weights(self):
+        # if not self.config.architecture.critic_custom_init:
+        #    return
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                if m.out_features == 1:  # Last layer
+                    nn.init.zeros_(m.weight)
+                    nn.init.zeros_(m.bias)
+                else:  # Hidden layers
+                    nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
 
     def forward(self, state, action):
         xu = torch.cat([state, action], 1)
-
-        x1 = xu
-        for l in self.q1_layers[:-1]:
-            x1 = F.relu(l(x1))
-        x1 = self.q1_layers[-1](x1)
-
-        x2 = xu
-        for l in self.q2_layers[:-1]:
-            x2 = F.relu(l(x2))
-        x2 = self.q2_layers[-1](x2)
-
+        x1 = self.q1_layers(xu)
+        x2 = self.q2_layers(xu)
         return x1, x2
 
 # Gaussian policy
 class ActorNetwork(Feedforward):
     def __init__(self, input_dims, learning_rate, device, lr_milestones, lr_factor=0.5,
                  action_space=None, hidden_sizes=[256, 256], reparam_noise=1e-6, dict_adamw=None):
+        # Initialize parent Feedforward network
         super().__init__(
             input_size=input_dims[0],
             hidden_sizes=hidden_sizes,
-            output_size=1,
+            output_size=1,  # Parent's output size (not directly used)
             device=device
         )
 
@@ -108,9 +114,21 @@ class ActorNetwork(Feedforward):
         self.action_space = action_space
         n_actions = 4
 
-        self.mu = nn.Linear(hidden_sizes[-1], n_actions)
-        self.log_sigma = nn.Linear(hidden_sizes[-1], n_actions)
+        # ===== Key Change: Modify parent's layers to include LayerNorm =====
+        new_layers = []
+        prev_size = self.input_size
+        for size in self.hidden_sizes:
+            new_layers.append(nn.Linear(prev_size, size))
+            new_layers.append(nn.LayerNorm(size))  # Add LayerNorm
+            new_layers.append(nn.ReLU())
+            prev_size = size
+        self.layers = nn.Sequential(*new_layers)  # Override parent's plain layers
 
+        # Output heads (unchanged)
+        self.mu = nn.Linear(prev_size, n_actions)
+        self.log_sigma = nn.Linear(prev_size, n_actions)
+
+        # Rest of your init code (optimizer, action scaling, etc.)
         self.learning_rate = learning_rate
         
         # set optimizer to AdamW else to adam
@@ -142,14 +160,11 @@ class ActorNetwork(Feedforward):
             self.action_bias = torch.tensor(0.).to(self.device)
 
     def forward(self, state):
-        prob = state
-        for layer in self.layers:
-            prob = F.relu(layer(prob))
-
-        mu = self.mu(prob)
-        log_sigma = self.log_sigma(prob)
-        log_sigma = torch.clamp(log_sigma, min=-20, max=10)
-
+        x = state
+        for layer in self.layers:  # Includes LayerNorm + ReLU
+            x = layer(x)
+        mu = self.mu(x)
+        log_sigma = self.log_sigma(x)
         return mu, log_sigma
 
     def sample(self, state, deterministic=False):
@@ -191,6 +206,8 @@ class RNDNetwork(nn.Module):
         
         for size in hidden_sizes:
             layers.append(nn.Linear(prev_size, size))
+            # add layernorm
+            layers.append(nn.LayerNorm(size))
             layers.append(nn.ReLU())
             prev_size = size
         

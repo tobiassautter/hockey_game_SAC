@@ -36,8 +36,8 @@ parser.add_argument('--evaluate_every',
                     help='# of episodes between evaluating agent during the training', type=int, default=500) #1000
 parser.add_argument('--add_self_every',
                     help='# of gradient updates between adding agent (self) to opponent list', type=int, default=5500)#1001)#100000)
-parser.add_argument('--learning_rate', help='Learning rate', type=float, default=1e-4) #1e-3)
-parser.add_argument('--alpha_lr', help='Learning rate', type=float, default=1e-5) #1e-4) #For meta : 3e-4
+parser.add_argument('--learning_rate', help='Learning rate', type=float, default=5e-4) #1e-3)
+parser.add_argument('--alpha_lr', help='Learning rate', type=float, default=1e-4) #1e-4) #For meta : 3e-4
 parser.add_argument('--lr_factor', help='Scale learning rate by', type=float, default=0.5)
 parser.add_argument('--lr_milestones', help='Learning rate milestones', nargs='+')
 parser.add_argument('--alpha_milestones', help='Learning rate milestones', nargs='+')
