@@ -53,8 +53,10 @@ class SACTrainer:
         total_step_counter = 0
         grad_updates = 0
         new_op_grad = []
+        # seed equals current dates day
+        seed = int(time.strftime("%d"))
         while episode_counter <= self._config['max_episodes']:
-            seed=episode_counter
+            
             ob, info = env.reset(seed=seed) # seed test
             obs_agent2 = env.obs_agent_two()
             # meta initial state
@@ -83,6 +85,8 @@ class SACTrainer:
 
                 touched = max(touched, _info['reward_touch_puck'])
 
+
+
                 def_reward = utils.compute_defensive_reward(ob, step)
 
                 if self._config.get('sparse', False):
@@ -90,30 +94,38 @@ class SACTrainer:
                         step_reward = env.winner * 5
                     else:
                         step_reward = def_reward
-                        #step_reward *= 0.25
-                        
-                        # Add touch reward from existing system
-                        # if touched > 0:
-                        #     step_reward += 0.2
-                else:
-                    # step_reward = (
-                    #     reward
-                    #     + 5 * _info['reward_closeness_to_puck']
-                    #     - (1 - touched) * 0.1
-                    #     + touched * first_time_touch * 0.1 * step
-                    # )
 
-                    # if env winner is 0, step reward -0.1
+                else:
+                    # bonus for fast win, penalty for fast loss, penalty for draw
+                    if env.winner == 1:
+                        goal_bonus = 10 * (250 - step) / 250
+                    elif env.winner == -1:
+                        goal_bonus = -10 * (250 - step) / 250
+                    else:
+                        goal_bonus = -0.15
+                    
                     step_reward = (
-                        reward * 0.1
-                        #+ 0.25 * _info['reward_closeness_to_puck']
+                        reward * 0.5
+                        + 2.5 * _info['reward_closeness_to_puck']
                         - (1 - touched) * 0.1
                         + touched * first_time_touch * 0.1 * step
-                        + def_reward * 0.05 # 0.5 # added defensive reward
-                        + env.winner * 5 # 8 # added winner reward as too defensive
-                        #- 0.25 # time for no goal
-                        + (env.winner == 0) * -0.01 # added penalty for draw
+                        + def_reward * 0.1 # 0.8 # 0.5 # added defensive reward
+                        + goal_bonus
+                        #     + env.winner * 9 # 8 # added winner reward as too defensive
+
                     )
+
+                    # if env winner is 0, step reward -0.1
+                    # step_reward = (
+                    #     reward * 0.15
+                    #     + 2 * _info['reward_closeness_to_puck']
+                    #     - (1 - touched) * 0.1
+                    #     + touched * first_time_touch * 0.1 * step
+                    #     + def_reward * 0.085 # 0.5 # added defensive reward
+                    #     + env.winner * 9 # 8 # added winner reward as too defensive
+                    #     #- 0.25 # time for no goal
+                    #     + (env.winner == 0) * -0.01 # added penalty for draw
+                    # )
                 
                 # Always compute intrinsic reward (RND stays active)
                 next_state_tensor = torch.as_tensor(next_state, dtype=torch.float32, device=agent.device).unsqueeze(0)
@@ -149,7 +161,7 @@ class SACTrainer:
 
             # Update beta after each episode
             if isinstance(agent.buffer, PrioritizedExperienceReplay):
-                agent.buffer.update_beta(total_step_counter, total_steps)
+                agent.buffer.update_beta(step=total_step_counter, total_steps=total_steps)
 
 
             if agent.buffer.size < self._config['batch_size']:
@@ -164,16 +176,24 @@ class SACTrainer:
                 q2_losses.append(losses[1])
                 actor_losses.append(losses[2])
                 alpha_losses.append(losses[3])
-
+                
                 # Add trained agent to opponents queue
-                if self._config['selfplay']:
+                if self._config.get("selfplay", False):
                     if (
-                        grad_updates % self._config['add_self_every'] == 0
+                        grad_updates % self._config.get("add_self_every", 10000) == 0
                     ):
-                        new_opponent = SACAgent.clone_from(agent)
+                        # new_opponent = SACAgent.clone_from(agent)
+                        temp_filename = f"temp_agent_{grad_updates}.pkl"
+                        temp_filepath = self.logger.save_model(agent, temp_filename)
+                        # Load the snapshot to create a static opponent
+                        new_opponent = SACAgent.load_model(temp_filepath.as_posix())
+                        print(f"New opponent!: {new_opponent}")
+                        
                         new_opponent.eval()
                         opponents.append(new_opponent)
                         new_op_grad.append(grad_updates)
+
+
 
             agent.schedulers_step()
 
@@ -234,7 +254,7 @@ class SACTrainer:
             title='Alpha Value',
             filename='alpha.pdf',
             show=False,
-            window=50
+            window=500
         )
         # Plot losses
         for loss, title in zip([q1_losses, q2_losses, actor_losses, alpha_losses],

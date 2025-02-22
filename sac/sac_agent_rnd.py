@@ -14,6 +14,7 @@ from base.experience_replay import UniformExperienceReplay, PrioritizedExperienc
 
 from collections import deque
 import random
+from torch.func import functional_call
 
 # USING BASE SCRIPTS FROM 1. PLACE 2021 COMPETITION
 # https://github.com/anticdimi/laser-hockey 
@@ -50,7 +51,7 @@ class SACAgent(Agent):
         self.action_space = action_space
         self.device = userconfig['device']
         self.alpha = self._config.get('alpha', 0.2)
-        self.automatic_entropy_tuning = self._config['automatic_entropy_tuning']
+        self.automatic_entropy_tuning = self._config.get('automatic_entropy_tuning', False)
         self.meta_tuning = self._config['meta_tuning']
         self.eval_mode = False
         # inital state buffer
@@ -61,7 +62,7 @@ class SACAgent(Agent):
         if self._config.get('per', False):  # Check if --per is enabled
             print("Using PrioritizedExperienceReplay buffer")
             self.buffer = PrioritizedExperienceReplay(
-                max_size=self._config['buffer_size'],  # Add buffer_size to config
+                max_size=self._config['buffer_size'],
                 alpha=self._config['per_alpha'],
                 beta=self._config['per_beta'],
                 epsilon=1e-5
@@ -96,7 +97,8 @@ class SACAgent(Agent):
             lr_milestones=lr_milestones,
             lr_factor=self._config['lr_factor'],
             device=self._config['device'],
-            dict_adamw=dict_adamw
+            dict_adamw=dict_adamw,
+            config=self._config
         ).to(self.device) # doppelt haelt besser
 
         self.critic = CriticNetwork(
@@ -151,8 +153,13 @@ class SACAgent(Agent):
                 lr=userconfig['rnd_lr'], 
             )
 
-        # RND scheduler
-        self.rnd_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.rnd_optimizer, gamma=0.9999)
+        # RND scheduler exp and linear
+        #self.rnd_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.rnd_optimizer, gamma=0.9999)
+        self.rnd_scheduler = torch.optim.lr_scheduler.LinearLR(self.rnd_optimizer, 
+                                                               start_factor=1.0, 
+                                                               end_factor=0.9,#self._config['lr_factor'], 
+                                                               total_iters=(self._config['max_episodes'] * 250) / 2
+                                                               )
 
         # Intrinsic reward weight
         self.beta = userconfig['beta']
@@ -179,8 +186,8 @@ class SACAgent(Agent):
                 milestones = None
             else:
                 milestones = [int(x) for x in (self._config['alpha_milestones'][0]).split(' ')]
-            #self.target_entropy = -torch.tensor(4).to(self.device)
-            self.target_entropy = -torch.prod(torch.Tensor(action_space.shape)).item()  # -action_dim # might fix
+            self.target_entropy = -0.95 * torch.tensor(4).to(self.device)
+
 
             
             self.log_alpha = torch.tensor(np.log(self.alpha), requires_grad=True, device=self.device)
@@ -198,9 +205,11 @@ class SACAgent(Agent):
                                                     )
  
             if milestones is None:
-                self.alpha_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-                    self.alpha_optim, gamma=0.9995
-                )
+                self.alpha_scheduler = torch.optim.lr_scheduler.LinearLR(self.alpha_optim, 
+                                                               start_factor=1.0, 
+                                                               end_factor=self._config['lr_factor'], 
+                                                               total_iters=self._config['max_episodes'] * 250 
+                                                               )
             else:
                 self.alpha_scheduler = torch.optim.lr_scheduler.MultiStepLR(
                     self.alpha_optim, milestones=milestones, gamma=0.5
@@ -208,8 +217,15 @@ class SACAgent(Agent):
 
         # self meta entropy tuning
         if self.meta_tuning:
+            if self._config['alpha_milestones'] is None:
+                print("Using exponential decay for entropy tuning")
+                milestones = None
+            else:
+                milestones = [int(x) for x in (self._config['alpha_milestones'][0]).split(' ')]
             # Change to Meta-SAC style parameterization
-            self.log_alpha = torch.tensor(np.log(self.alpha), requires_grad=True, device=self.device)
+
+            #self.log_alpha = torch.tensor(np.log(self.alpha), requires_grad=True, device=self.device)
+            self.log_alpha = torch.nn.Parameter(torch.tensor(np.log(self.alpha), device=self.device))
             self.alpha = self.log_alpha.exp()
             
             # Meta-SAC optimizer (use separate optimizer)
@@ -224,14 +240,21 @@ class SACAgent(Agent):
                                                      lr=self._config['alpha_lr']
                                                     )
                 
-            # Meta-SAC scheduler exponential decay
-            self.alpha_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-                self.alpha_optim, gamma=0.9995
-            )
+            if milestones is None:
+                self.alpha_scheduler = torch.optim.lr_scheduler.LinearLR(self.alpha_optim, 
+                                                               start_factor=1.0, 
+                                                               end_factor=self._config['lr_factor'], 
+                                                               total_iters=self._config['max_episodes'] * 250 
+                                                               )
+            else:
+                # Meta-SAC scheduler exponential decay
+                self.alpha_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+                    self.alpha_optim, milestones=milestones, gamma=0.5
+                )
     
     def normalize(self, x):
         normalized = (x - self.obs_mean) / (self.obs_std + 1e-8)
-        return torch.clamp(normalized, -5, 5)
+        return torch.clamp(normalized, -8, 8)
 
 
     # For meta tuning
@@ -239,23 +262,98 @@ class SACAgent(Agent):
         """Call this during training when resetting env"""
         self.initial_state_buffer.append(state.copy())
 
-    # compute meta loss
+
+    # def compute_meta_loss(self):
+    #     """
+    #     Simplified Meta-SAC meta loss computation.
+    #     """
+    #     meta_batch_size = self._config.get('meta_batch_size', 32)
+    #     if len(self.initial_state_buffer) < meta_batch_size:
+    #         return None
+
+    #     # Sample a batch of initial states and normalize them.
+    #     states = random.sample(self.initial_state_buffer, meta_batch_size)
+    #     states = torch.tensor(np.array(states), dtype=torch.float32, device=self.device)
+    #     normalized_states = self.normalize(states)
+
+    #     # Get deterministic actions from the actor.
+    #     _, _, actions, _ = self.actor.sample(normalized_states, deterministic=True)
+
+    #     # Compute the meta loss using the critic on these actions.
+    #     meta_q1, _ = self.critic(normalized_states, actions)
+    #     meta_loss = -meta_q1.mean()  # Maximize Q-value
+
+    #     return meta_loss
+
+
+
     def compute_meta_loss(self):
-        """Meta-SAC's novel meta loss calculation"""
-        if len(self.initial_state_buffer) < self._config['batch_size']:
+        """
+        Compute the Meta-SAC meta loss by performing a differentiable one-step actor update
+        and then evaluating the critic on the updated deterministic actions.
+        """
+        # Use a smaller meta batch size (default 32).
+        meta_batch_size = self._config.get('meta_batch_size', 32)
+        if len(self.initial_state_buffer) < meta_batch_size:
+            #print("Not enough initial states in buffer for meta loss")
             return None
-        
-        # Sample initial states
-        states = random.sample(self.initial_state_buffer, self._config['batch_size'])
+
+        # Sample a batch of initial states and normalize them.
+        states = random.sample(self.initial_state_buffer, meta_batch_size)
         states = torch.tensor(np.array(states), dtype=torch.float32, device=self.device)
+        normalized_states = self.normalize(states)
 
-        normalized_states = self.normalize(states) 
-        actions = self.actor.sample(normalized_states, deterministic=True)[2]  # Use normalized
+        # --- Differentiable Actor Update ---
+        # Compute the actor loss on these states.
+        # Here we include a scaling factor 'meta_scale' to amplify the influence of α.
+        meta_scale = self._config.get('meta_scale', 10.0)
+        pi, log_pi, _, _ = self.actor.sample(normalized_states)
+        q1_pi, q2_pi = self.critic(normalized_states, pi)
+        min_qf_pi = torch.min(q1_pi, q2_pi)
+        actor_loss = ((meta_scale * self.alpha * log_pi) - min_qf_pi).mean()
 
-        # Compute Q-values with current critic
-        q1, _ = self.critic(states, actions)
-        return -q1.mean() * 0.05 # Scale loss for stability
+        # Compute gradients with respect to the actor parameters.
+        actor_params = list(self.actor.parameters())
+        grads = torch.autograd.grad(actor_loss, actor_params, create_graph=True)
 
+        # Print norm of gradients to check sensitivity.
+        total_norm = sum(g.norm().item() for g in grads)
+        #print("Meta actor loss:", actor_loss.item(), "Total grad norm:", total_norm)
+
+        # Simulate a one-step gradient update using the actor learning rate.
+        actor_lr = self._config.get('learning_rate', 3e-4)
+        updated_params = [p - actor_lr * g for p, g in zip(actor_params, grads)]
+
+        # Create an updated state_dict mapping parameter names to updated parameters.
+        updated_state_dict = {}
+        state_dict_keys = list(self.actor.state_dict().keys())
+        for key, updated_param in zip(state_dict_keys, updated_params):
+            updated_state_dict[key] = updated_param
+
+        # --- Compute Meta Loss ---
+        # Use the updated actor parameters to compute new outputs.
+        updated_output = functional_call(self.actor, updated_state_dict, normalized_states)
+        #print("Updated output from actor:", updated_output)
+        
+        # Extract deterministic actions:
+        if isinstance(updated_output, tuple):
+            if len(updated_output) >= 3:
+                new_actions = updated_output[2]
+            else:
+                new_actions = updated_output[0]
+        else:
+            new_actions = updated_output
+
+        # Compute the meta loss using the critic on these updated actions.
+        meta_q1, _ = self.critic(normalized_states, new_actions)
+        meta_loss = -meta_q1.mean()
+
+        # Debug print meta loss and its gradient with respect to log_alpha.
+        #meta_loss_val = meta_loss.item()
+        #meta_loss_grad = torch.autograd.grad(meta_loss, self.log_alpha, retain_graph=True)[0]
+        #print("Meta loss:", meta_loss_val, "Gradient on log_alpha:", meta_loss_grad.item())
+
+        return meta_loss
 
     @classmethod
     def clone_from(cls, agent):
@@ -441,23 +539,37 @@ class SACAgent(Agent):
             computed_alpha_loss = alpha_loss.item()
         
         elif self.meta_tuning:
+            
             meta_loss = self.compute_meta_loss()
+
             if meta_loss is not None:  
                 self.alpha_optim.zero_grad()
                 meta_loss.backward()
+
+                # Clip gradients to prevent instability
+                torch.nn.utils.clip_grad_norm_([self.log_alpha], max_norm=1.0)
+
+                # Log gradient for debugging
+                grad_norm = self.log_alpha.grad.norm().item()
+                #print(f"Meta loss: {meta_loss.item()}, Gradient norm: {grad_norm}")
+
                 self.alpha_optim.step()
                 self.alpha = self.log_alpha.exp()
                 computed_alpha_loss = meta_loss.item()
             else:
+                #print("Self Meta isnt getting adjusted, meta loss is none")
                 computed_alpha_loss = 0.0  
 
         # Clip Alpha
-        self.log_alpha.data = torch.clamp(
-            self.log_alpha, 
-            min=np.log(0.01), 
-            max=np.log(1.0)
-        )
-        self.alpha = self.log_alpha.exp()
+        # self.log_alpha.data = torch.clamp(
+        #     self.log_alpha, 
+        #     min=np.log(0.01), 
+        #     max=np.log(1.0)
+        # )
+        #self.alpha = self.log_alpha.exp()
+
+        # Softclip
+        self.alpha = F.softplus(self.log_alpha)
 
         # Step 7: Soft update the target critic networks
         if total_step % self._config['update_target_every'] == 0:

@@ -42,15 +42,25 @@ class ExperienceReplay:
             buffer.add_transition(t)
 
         return buffer
-
+    
     def add_transition(self, transitions_new):
+    # Initialize the buffer on the first call
         if self.size == 0:
-            blank_buffer = [np.asarray(transitions_new, dtype=object)] * self.max_size
-            self._transitions = np.asarray(blank_buffer)
-
-        self._transitions[self._current_idx, :] = np.asarray(transitions_new, dtype=object)
+            self._transitions = np.empty((self.max_size,), dtype=object)
+        # Store the new transition in its own distinct slot
+        self._transitions[self._current_idx] = np.asarray(transitions_new, dtype=object)
         self.size = min(self.size + 1, self.max_size)
         self._current_idx = (self._current_idx + 1) % self.max_size
+
+
+    # def add_transition(self, transitions_new):
+    #     if self.size == 0:
+    #         blank_buffer = [np.asarray(transitions_new, dtype=object)] * self.max_size
+    #         self._transitions = np.asarray(blank_buffer)
+
+    #     self._transitions[self._current_idx, :] = np.asarray(transitions_new, dtype=object)
+    #     self.size = min(self.size + 1, self.max_size)
+    #     self._current_idx = (self._current_idx + 1) % self.max_size
 
     def preload_transitions(self, path):
         for file in os.listdir(path):
@@ -108,7 +118,7 @@ class PrioritizedExperienceReplay(ExperienceReplay):
         super(PrioritizedExperienceReplay, self).__init__(max_size)
         self._alpha = alpha
         self._beta_start = beta  # Initial beta value
-        self._beta_end = 1.0     # Final beta value
+        self._beta_end = 0.8#1.0     # Final beta value
         self._epsilon = epsilon  # Added epsilon to avoid zero priority
         self._max_priority = 1.0  # Initial max priority
 

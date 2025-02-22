@@ -10,96 +10,28 @@ from hockey.hockey_env import CENTER_X, CENTER_Y, SCALE, W, H, HockeyEnv, Mode, 
 import os
 from scipy.spatial import distance as euclidean_distance
 import gymnasium as gym
-# class EnvWrapper(gym.Wrapper):
-#     def _init_(self, config=None, random_init=False):
-#         env = HockeyEnv(mode=Mode.NORMAL)
-#         super()._init_(env)
-#         self.env = env
-#         self.config = config
-        
-#     def reset(self, seed = None):
-#         if seed is None:
-#             seed = np.random.randint(0, 1e10)
-#         obs1, _ = self.env.reset(seed=seed)
-#         obs2 = self.env.obs_agent_two()
-#         return obs1, obs2
-
-#     def step(self, action):
-#         obs1, reward, done, _, info = self.env.step(action)
-#         obs2 = self.env.obs_agent_two()
-#         reward = info['winner']
-#         trunc = done
-#         done = np.abs(info['winner'])
-#         reward = info['winner']
-#         return obs1, obs2, reward, done, trunc
-      
-#     @staticmethod
-#     def augment(observation: np.ndarray, config) -> np.ndarray:
-#         observation_augmented = np.empty(config.env.obs_augmentation_dim)
-#         observation_augmented[: observation.shape[0]] = observation
-
-#         player_1 = observation[0:2]
-#         player_2 = observation[6:8]
-#         puck = observation[12:14]
-#         goal_1 = np.array([W / 2 - 250 / SCALE, H / 2])
-#         goal_2 = np.array([W / 2 + 250 / SCALE, H / 2])
-
-#         # Augment by adding distances
-#         observation_augmented[18] = euclidean_distance(player_1, player_2)
-#         observation_augmented[19] = euclidean_distance(player_1, puck)
-#         observation_augmented[20] = euclidean_distance(player_2, puck)
-#         observation_augmented[21] = euclidean_distance(player_1, goal_1)
-#         observation_augmented[22] = euclidean_distance(player_1, goal_2)
-#         observation_augmented[23] = euclidean_distance(player_2, goal_1)
-#         observation_augmented[24] = euclidean_distance(player_2, goal_2)
-#         observation_augmented[25] = euclidean_distance(puck, goal_1)
-#         observation_augmented[26] = euclidean_distance(puck, goal_2)
-
-#         return observation_augmented
 
 
-# # Puck trajectory prediction
-# def set_state(self, state):
-#     """ function to revert the state of the environment to a previous state (observation)"""
-#     self.player1.position = (state[[0, 1]] + [CENTER_X, CENTER_Y]).tolist()
-#     self.player1.angle = state[2]
-#     self.player1.linearVelocity = [state[3], state[4]]
-#     self.player1.angularVelocity = state[5]
-#     self.player2.position = (state[[6, 7]] + [CENTER_X, CENTER_Y]).tolist()
-#     self.player2.angle = state[8]
-#     self.player2.linearVelocity = [state[9], state[10]]
-#     self.player2.angularVelocity = state[11]
-#     self.puck.position = (state[[12, 13]] + [CENTER_X, CENTER_Y]).tolist()
-#     self.puck.linearVelocity = [state[14], state[15]]
-#     self.player1_has_puck = state[16]
-#     self.player2_has_puck = state[17]
+def save_temp_agent(self, agent, filename="temp_agent.pkl"):
+    """
+    Save the given agent to a temporary pickle file.
+    Returns the full path to the saved file.
+    """
+    savepath = self.agents_prefix_path.joinpath(filename).with_suffix('.pkl')
+    with open(savepath, "wb") as outp:
+        pickle.dump(agent, outp, pickle.HIGHEST_PROTOCOL)
+    self.info(f"Temporary agent saved to {savepath}")
+    return savepath
 
+def load_temp_agent(self, filepath):
+    """
+    Load an agent from the specified pickle file.
+    """
+    with open(filepath, "rb") as inp:
+        agent = pickle.load(inp)
+    self.info(f"Temporary agent loaded from {filepath}")
+    return agent
 
-# @staticmethod
-# def forecast_puck_trajectory(input_obs, n_steps, frame_skip):
-#     env = EnvWrapper()
-#     env.reset()
-#     env.env.set_state(input_obs)
-#     env.env.player1.linearVelocity=(0, 0)
-#     env.env.player2.linearVelocity=(0, 0)
-#     possession1 = input_obs[16] > 0
-#     possession2 = input_obs[17] > 0
-#     if possession1:
-#         action = [0, 0, 0, 1, 0, 0, 0, 0]
-#     elif possession2:
-#         action = [0, 0, 0, 0, 0, 0, 0, 1]
-#     elif env.env.puck.linearVelocity[0] == env.env.puck.linearVelocity[1] == 0:
-#         return np.array([(input_obs[12], input_obs[13]) * n_steps]).flatten()
-#     else:
-#         action = [0, 0, 0, 0, 0, 0, 0, 0]
-#     trajectory = []
-#     for i in range(n_steps * frame_skip):
-#         obs1, obs2, reward, done, trunc = env.step(action)
-#     if i % frame_skip == 0:
-#         trajectory.append(obs1[12])
-#         trajectory.append(obs1[13])
-
-#     return np.array(trajectory).flatten()
 
 
 # Helper functions for the hockey environment
@@ -447,6 +379,7 @@ class Logger:
         savepath = self.agents_prefix_path.joinpath(filename).with_suffix('.pkl')
         with open(savepath, 'wb') as outp:
             pickle.dump(model, outp, pickle.HIGHEST_PROTOCOL)
+        return savepath
 
     def print_episode_info(self, game_outcome, episode_counter, step, total_reward, epsilon=None, touched=None,
                            opponent=None, alpha=None):
@@ -504,7 +437,7 @@ class Logger:
             plt.show()
         plt.close()
 
-    def plot_running_mean(self, data, title, filename=None, show=True, v_milestones=None, window=250):
+    def plot_running_mean(self, data, title, filename=None, show=True, v_milestones=None, window=500):
         data_np = np.asarray(data)
         mean = running_mean(data_np, window)
         self._plot(mean, title, filename, show)

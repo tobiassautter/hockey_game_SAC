@@ -105,7 +105,7 @@ def initialize_agent(agent_args: list[str]) -> Agent:
     elif args.agent == "random":
         agent = RandomAgent()
     elif args.agent == "ElSacko":
-        trained_agent = SACAgent.load_model("sac/latest_agent/i4-agent.pkl")#f2 #e #d-agent.pkl") #b-6000.pkl")
+        trained_agent = SACAgent.load_model("sac/latest_agent/m-agent.pkl") #f2 #e #d-agent.pkl") #b-6000.pkl")
         agent = SACWrapper(trained_agent)
     else:
         raise ValueError(f"Unknown agent: {args.agent}")

@@ -35,14 +35,14 @@ parser.add_argument('--eval_episodes', help='Set number of evaluation episodes',
 parser.add_argument('--evaluate_every',
                     help='# of episodes between evaluating agent during the training', type=int, default=500) #1000
 parser.add_argument('--add_self_every',
-                    help='# of gradient updates between adding agent (self) to opponent list', type=int, default=5500)#1001)#100000)
-parser.add_argument('--learning_rate', help='Learning rate', type=float, default=5e-4) #1e-3)
+                    help='# of gradient updates between adding agent (self) to opponent list', type=int, default=30000)#1001)#100000)
+parser.add_argument('--learning_rate', help='Learning rate', type=float, default=1e-3) #1e-3)
 parser.add_argument('--alpha_lr', help='Learning rate', type=float, default=1e-4) #1e-4) #For meta : 3e-4
 parser.add_argument('--lr_factor', help='Scale learning rate by', type=float, default=0.5)
 parser.add_argument('--lr_milestones', help='Learning rate milestones', nargs='+')
 parser.add_argument('--alpha_milestones', help='Learning rate milestones', nargs='+')
 parser.add_argument('--update_target_every', help='# of steps between updating target net', type=int, default=1)
-parser.add_argument('--gamma', help='Discount', type=float, default=0.98) #0.95)
+parser.add_argument('--gamma', help='Discount', type=float, default=0.95) #0.95)
 parser.add_argument('--batch_size', help='batch_size', type=int, default=128) #128
 parser.add_argument('--grad_steps', help='grad_steps', type=int, default=32)
 parser.add_argument('--alpha', type=float, default=0.2, help='Temperature parameter alpha determines the relative importance of the entropy term against the reward')
@@ -61,7 +61,7 @@ parser.add_argument('--show_percent', help='Percentage of episodes to show', typ
 
 # RND params
 parser.add_argument('--beta', type=float, default=1.0, help='Intrinsic reward scaling factor')
-parser.add_argument('--rnd_lr', type=float, default=1e-4, help='Learning rate for RND predictor')
+parser.add_argument('--rnd_lr', type=float, default=5e-3, help='Learning rate for RND predictor')
 
 # Train sparse reward
 parser.add_argument('--sparse', type=bool, default=False, help='Train with sparse reward')
@@ -74,9 +74,14 @@ parser.add_argument('--adamw', type=bool, default=True, help='Use AdamW optimize
 parser.add_argument('--adamw_eps', type=float, default=1e-6, help='AdamW epsilon')
 parser.add_argument('--adamw_weight_decay', type=float, default=1e-6, help='AdamW weight decay')
 
-# Add meta tuning instead of old entropy tuning
+# Add meta tuning instead of old entropy tuning with meta_batch_size
 parser.add_argument('--meta_tuning', action='store_true', help='Use Meta-SAC entropy tuning')
+parser.add_argument('--meta_batch_size', type=int, default=32, help='Batch size for meta tuning')
+# add meta scale 20.0
+parser.add_argument('--meta_scale', type=float, default=50.0, help='Scale for meta tuning')
 
+# add buffer size
+parser.add_argument('--buffer_size', type=int, default=10, help='Buffer size for experience replay')
 opts = parser.parse_args()
 
 if __name__ == '__main__':
@@ -121,11 +126,11 @@ if __name__ == '__main__':
 
     # Add absolute paths for pretrained agents
     pretrained_agents = [
-        "sac/all_agents/k-agent.pkl",
-        "sac/all_agents/i4-agent.pkl", 
-        #"sac/all_agents/g-agent.pkl", 
-        #"sac/all_agents/e-agent.pkl", 
-        #"sac/all_agents/d-agent.pkl"
+        #"sac/all_agents/k-agent.pkl",
+        #"sac/all_agents/i4-agent.pkl", 
+        "sac/all_agents/m-agent.pkl", 
+        "sac/all_agents/n-agent.pkl", 
+        "sac/all_agents/n2-agent.pkl"
         ]
     
     # Set up the pretrained agents
@@ -152,9 +157,9 @@ if __name__ == '__main__':
     else:
         agent = SACAgent.load_model(opts.preload_path)
         if opts.per:
-            agent.buffer = ExperienceReplay.clone_buffer_per(agent.buffer, 1000000, opts.per_alpha, opts.per_beta)
+            agent.buffer = ExperienceReplay.clone_buffer_per(agent.buffer, opts.buffer_size, opts.per_alpha, opts.per_beta)
         else:
-            agent.buffer = ExperienceReplay.clone_buffer(agent.buffer, 1000000)
+            agent.buffer = ExperienceReplay.clone_buffer(agent.buffer, opts.buffer_size)#300000)
 
         #agent.buffer.preload_transitions(opts.transitions_path)
         agent.train()

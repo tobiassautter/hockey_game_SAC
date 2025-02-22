@@ -29,7 +29,8 @@ class CriticNetwork(nn.Module):
         super(CriticNetwork, self).__init__()
         self.device = device
         self.config = config  # Pass config to access initialization settings
-
+        self.max_episodes = config["max_episodes"]
+        self.lr_factor = lr_factor
         layer_sizes = [input_dim[0] + n_actions] + hidden_sizes + [1]
 
         # Q1 architecture with LayerNorm
@@ -55,7 +56,7 @@ class CriticNetwork(nn.Module):
 
         # if parm, use multistep or exponential scheduler
         if lr_milestones is None:
-            self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.995) 
+            self.lr_scheduler = torch.optim.lr_scheduler.LinearLR(self.optimizer, start_factor=1.0, end_factor=self.lr_factor, total_iters=self.max_episodes * 250 ) 
         else:    
             self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=lr_milestones, gamma=lr_factor
         )
@@ -100,7 +101,7 @@ class CriticNetwork(nn.Module):
 
 # Gaussian policy
 class ActorNetwork(Feedforward):
-    def __init__(self, input_dims, learning_rate, device, lr_milestones, lr_factor=0.5,
+    def __init__(self, input_dims, learning_rate, device, lr_milestones, lr_factor=0.5, config={},
                  action_space=None, hidden_sizes=[256, 256], reparam_noise=1e-6, dict_adamw=None):
         # Initialize parent Feedforward network
         super().__init__(
@@ -110,6 +111,9 @@ class ActorNetwork(Feedforward):
             device=device
         )
 
+        self.config = config  # Pass config to access initialization settings
+        self.max_episodes = config["max_episodes"]
+        self.lr_factor = lr_factor
         self.reparam_noise = reparam_noise
         self.action_space = action_space
         n_actions = 4
@@ -143,7 +147,7 @@ class ActorNetwork(Feedforward):
 
         # if parm, use multistep or exponential scheduler
         if lr_milestones is None:
-            self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.995)
+            self.lr_scheduler = torch.optim.lr_scheduler.LinearLR(self.optimizer, start_factor=1.0, end_factor=self.lr_factor, total_iters=self.max_episodes * 250 ) 
         else:
             self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=lr_milestones, gamma=lr_factor)
 
