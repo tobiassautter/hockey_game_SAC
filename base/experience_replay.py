@@ -29,7 +29,7 @@ class ExperienceReplay:
 
     @staticmethod
     def clone_buffer(new_buffer, maxsize):
-        old_transitions = deepcopy(new_buffer._transitions)
+        old_transitions = deepcopy(new_buffer._transitions[:new_buffer.size])
         buffer = UniformExperienceReplay(max_size=maxsize)
         for t in old_transitions:
             buffer.add_transition(t)
@@ -38,7 +38,7 @@ class ExperienceReplay:
     
     @staticmethod
     def clone_buffer_per(new_buffer, maxsize, alpha, beta, beta_end):
-        old_transitions = deepcopy(new_buffer._transitions)
+        old_transitions = deepcopy(new_buffer._transitions[:new_buffer.size])
         buffer = PrioritizedExperienceReplay(max_size=maxsize, alpha=alpha, beta=beta, beta_end=beta_end)
         for t in old_transitions:
             buffer.add_transition(t)

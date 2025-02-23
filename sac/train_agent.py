@@ -130,10 +130,10 @@ if __name__ == '__main__':
 
     # Add absolute paths for pretrained agents
     pretrained_agents = [
-        #"sac/all_agents/k-agent.pkl",
-        #"sac/all_agents/i4-agent.pkl", 
+        #"sac/all_agents/o2-agent.pkl",
+        "sac/all_agents/o1-agent.pkl", 
         "sac/all_agents/m-agent.pkl", 
-        "sac/all_agents/n-agent.pkl", 
+        #"sac/all_agents/n-agent.pkl", 
         #"sac/all_agents/n2-agent.pkl"
         ]
     
@@ -161,9 +161,12 @@ if __name__ == '__main__':
     else:
         agent = SACAgent.load_model(opts.preload_path)
         if opts.per:
-            agent.buffer = ExperienceReplay.clone_buffer_per(agent.buffer, opts.buffer_size, opts.per_alpha, opts.per_beta)
+            #agent.buffer = ExperienceReplay.clone_buffer_per(agent.buffer, opts.buffer_size, opts.per_alpha, opts.per_beta)
+            agent.buffer = ExperienceReplay(max_size=opts.buffer_size, alpha=opts.per_alpha, beta=opts.per_beta, beta_end=opts.per_beta_end)
         else:
             agent.buffer = ExperienceReplay.clone_buffer(agent.buffer, opts.buffer_size)#300000)
+            #agent.buffer = ExperienceReplay(max_size=opts.buffer_size)
+            print("No buffer cloning")
 
         #agent.buffer.preload_transitions(opts.transitions_path)
         agent.train()
