@@ -7,7 +7,7 @@ from base.segment_tree import SumSegmentTree, MinSegmentTree
 from copy import deepcopy
 from utils import utils
 import os
-
+import logging
 
 class ExperienceReplay:
     """
@@ -24,6 +24,8 @@ class ExperienceReplay:
         self._current_idx = 0
         self.size = 0
         self.max_size = max_size
+        #logging.basicConfig(level=logging.INFO)  # Set up logging
+
 
     @staticmethod
     def clone_buffer(new_buffer, maxsize):
@@ -35,32 +37,27 @@ class ExperienceReplay:
         return buffer
     
     @staticmethod
-    def clone_buffer_per(new_buffer, maxsize, alpha, beta):
+    def clone_buffer_per(new_buffer, maxsize, alpha, beta, beta_end):
         old_transitions = deepcopy(new_buffer._transitions)
-        buffer = PrioritizedExperienceReplay(max_size=maxsize, alpha=alpha, beta=beta)
+        buffer = PrioritizedExperienceReplay(max_size=maxsize, alpha=alpha, beta=beta, beta_end=beta_end)
         for t in old_transitions:
             buffer.add_transition(t)
 
         return buffer
-    
+
     def add_transition(self, transitions_new):
-    # Initialize the buffer on the first call
         if self.size == 0:
-            self._transitions = np.empty((self.max_size,), dtype=object)
-        # Store the new transition in its own distinct slot
-        self._transitions[self._current_idx] = np.asarray(transitions_new, dtype=object)
-        self.size = min(self.size + 1, self.max_size)
-        self._current_idx = (self._current_idx + 1) % self.max_size
+            # Initialize buffer with correct structure
+            self._transitions = np.empty(self.max_size, dtype=object)
+            self._transitions[self._current_idx] = np.asarray(transitions_new, dtype=object)
+            self.size = 1
+            self._current_idx = 1 % self.max_size
+        else:
+            transition_arr = np.asarray(transitions_new, dtype=object)
+            self._transitions[self._current_idx] = transition_arr
+            self.size = min(self.size + 1, self.max_size)
+            self._current_idx = (self._current_idx + 1) % self.max_size
 
-
-    # def add_transition(self, transitions_new):
-    #     if self.size == 0:
-    #         blank_buffer = [np.asarray(transitions_new, dtype=object)] * self.max_size
-    #         self._transitions = np.asarray(blank_buffer)
-
-    #     self._transitions[self._current_idx, :] = np.asarray(transitions_new, dtype=object)
-    #     self.size = min(self.size + 1, self.max_size)
-    #     self._current_idx = (self._current_idx + 1) % self.max_size
 
     def preload_transitions(self, path):
         for file in os.listdir(path):
@@ -100,8 +97,7 @@ class UniformExperienceReplay(ExperienceReplay):
             batch_size = self.size
 
         indices = np.random.choice(self.size, size=batch_size, replace=False)
-        return self._transitions[indices, :]
-
+        return self._transitions[indices]
 
 
 # Implemented from https://arxiv.org/pdf/1511.05952
@@ -114,13 +110,14 @@ class PrioritizedExperienceReplay(ExperienceReplay):
     - Sampling Probability: P(i) = (p_i^α) / Σ_k (p_k^α)
     - Importance Sampling Weight: w_i = ( (N * P(i)) ^ (-β) ) / max(w)
     """
-    def __init__(self, max_size, alpha, beta, epsilon=3e-3):
+    def __init__(self, max_size, alpha=0.6, beta=0.4, beta_end=0.95, epsilon=1e-3):
         super(PrioritizedExperienceReplay, self).__init__(max_size)
         self._alpha = alpha
         self._beta_start = beta  # Initial beta value
-        self._beta_end = 0.8#1.0     # Final beta value
+        self._beta_end = beta_end     # Final beta value
         self._epsilon = epsilon  # Added epsilon to avoid zero priority
         self._max_priority = 1.0  # Initial max priority
+        print(f"Creating PER buffer with alpha={alpha}, beta={beta}, beta_end={beta_end}, epsilon={epsilon}")
 
         # Segment Trees for efficient priority management
         st_capacity = 1
@@ -148,31 +145,29 @@ class PrioritizedExperienceReplay(ExperienceReplay):
         return np.array(indices)
 
     def sample(self, batch_size):
-        """
-        Returns:
-            Transitions with importance sampling weights and indices for updating priorities.
-            Shape: [batch_size, transition_dim + 2 (weight, index)]
-        """
-        if batch_size > self.size:
-            batch_size = self.size
-
+        if self.size == 0:
+            return {'transitions': np.asarray([]), 'weights': np.asarray([]), 'indices': np.asarray([])}
+        batch_size = min(batch_size, self.size)
         indices = self._sample_proportionally(batch_size)
         weights = []
 
-        # Compute max weight for normalization
-        p_min = self._st_min.min() / self._st_sum.sum()
-        max_weight = (p_min * self.size) ** (-self._beta)
+        sum_p = self._st_sum.sum(0, self.size - 1)
+        min_p = self._st_min.min(0, self.size - 1) / sum_p
+        max_weight = (min_p * self.size) ** (-self._beta)
 
         for idx in indices:
-            p_sample = self._st_sum[idx] / self._st_sum.sum()
+            p_sample = self._st_sum[idx] / sum_p
             weight = (p_sample * self.size) ** (-self._beta)
             weights.append(weight / max_weight)
 
-        # Concatenate transitions, weights, indices
-        sampled_transitions = self._transitions[indices, :]
+        sampled_transitions = self._transitions[indices]
         weights = np.array(weights).reshape(-1, 1)
         indices = np.array(indices).reshape(-1, 1)
-        return np.concatenate([sampled_transitions, weights, indices], axis=-1)
+        return {
+            'transitions': sampled_transitions,
+            'weights': weights,
+            'indices': indices
+        }
 
     def update_priorities(self, indices, priorities):
         """

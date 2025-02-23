@@ -6,7 +6,7 @@ from sac_agent_rnd import SACAgent
 from utils import utils
 from hockey import hockey_env as h_env
 from base.experience_replay import PrioritizedExperienceReplay
-
+import logging
 import torch
 
 class SACTrainer:
@@ -55,6 +55,7 @@ class SACTrainer:
         new_op_grad = []
         # seed equals current dates day
         seed = int(time.strftime("%d"))
+        #logging.basicConfig(level=logging.INFO)  # Set up logging
         while episode_counter <= self._config['max_episodes']:
             
             ob, info = env.reset(seed=seed) # seed test
@@ -129,7 +130,7 @@ class SACTrainer:
                 
                 # Always compute intrinsic reward (RND stays active)
                 next_state_tensor = torch.as_tensor(next_state, dtype=torch.float32, device=agent.device).unsqueeze(0)
-                intrinsic_reward = agent.compute_intrinsic_reward(next_state_tensor).item()
+                #intrinsic_reward = agent.compute_intrinsic_reward(next_state_tensor).item()
 
                 # if in first 5 steps set reward to 0
                 if episode_counter < 10:
@@ -158,12 +159,17 @@ class SACTrainer:
                 obs_agent2 = env.obs_agent_two()
                 total_step_counter += 1
 
+            # Update rnd beta after each episode in agent
+            agent.update_rnd_beta(episode_counter)
 
             # Update beta after each episode
             if isinstance(agent.buffer, PrioritizedExperienceReplay):
                 agent.buffer.update_beta(step=total_step_counter, total_steps=total_steps)
 
-
+            # Log buffer size every 10 episodes
+            if episode_counter % 100 == 0:
+                logging.info(f"Episode {episode_counter}: Buffer size = {agent.buffer.size}/{agent.buffer.max_size}")
+            
             if agent.buffer.size < self._config['batch_size']:
                 continue
 

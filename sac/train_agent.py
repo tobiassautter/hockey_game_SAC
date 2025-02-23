@@ -49,19 +49,23 @@ parser.add_argument('--alpha', type=float, default=0.2, help='Temperature parame
 parser.add_argument('--automatic_entropy_tuning', type=bool, default=False,
                     help='Automatically adjust alpha')
 parser.add_argument('--selfplay', type=bool, default=False, help='Should agent train selfplaf')
-parser.add_argument('--soft_tau', help='tau', type=float, default=0.005)
+parser.add_argument('--soft_tau', help='tau', type=float, default=0.005)\
+
+# PER params, per_alpha, per_beta, per_beta_end
 parser.add_argument('--per', help='Utilize Prioritized Experience Replay', action='store_true')
 parser.add_argument('--per_alpha', help='Alpha for PER', type=float, default=0.6)
 parser.add_argument('--per_beta', help='Beta for PER', type=float, default=0.4)
+parser.add_argument('--per_beta_end', help='Beta end for PER', type=float, default=0.95)
 
 #extra sauce: ---
 # env_render_eval = True
 parser.add_argument('--e_r', help='Set if want to see evaluation process rendered', action='store_true')
 parser.add_argument('--show_percent', help='Percentage of episodes to show', type=int, default=10)
 
-# RND params
+# RND params, beta intinsic reward, rnd_lr learning rate for RND predictor, beta_end_factor for meta tuning
 parser.add_argument('--beta', type=float, default=1.0, help='Intrinsic reward scaling factor')
-parser.add_argument('--rnd_lr', type=float, default=5e-3, help='Learning rate for RND predictor')
+parser.add_argument('--beta_end', type=float, default=1, help='Intrinsic reward scaling factor')
+parser.add_argument('--rnd_lr', type=float, default=5e-4, help='Learning rate for RND predictor')
 
 # Train sparse reward
 parser.add_argument('--sparse', type=bool, default=False, help='Train with sparse reward')
@@ -70,18 +74,18 @@ parser.add_argument('--sparse', type=bool, default=False, help='Train with spars
 parser.add_argument('--pretrained', type=bool, default=False, help='Train against pretrained agents only')
 
 # Use adam or adamW and adamW params
-parser.add_argument('--adamw', type=bool, default=True, help='Use AdamW optimizer')
+parser.add_argument('--adamw', type=bool, default=False, help='Use AdamW optimizer')
 parser.add_argument('--adamw_eps', type=float, default=1e-6, help='AdamW epsilon')
 parser.add_argument('--adamw_weight_decay', type=float, default=1e-6, help='AdamW weight decay')
 
 # Add meta tuning instead of old entropy tuning with meta_batch_size
 parser.add_argument('--meta_tuning', action='store_true', help='Use Meta-SAC entropy tuning')
-parser.add_argument('--meta_batch_size', type=int, default=32, help='Batch size for meta tuning')
+parser.add_argument('--meta_batch_size', type=int, default=128, help='Batch size for meta tuning')
 # add meta scale 20.0
-parser.add_argument('--meta_scale', type=float, default=50.0, help='Scale for meta tuning')
+parser.add_argument('--meta_scale', type=float, default=10.0, help='Scale for meta tuning')
 
 # add buffer size
-parser.add_argument('--buffer_size', type=int, default=10, help='Buffer size for experience replay')
+parser.add_argument('--buffer_size', type=int, default=5_000_000, help='Buffer size for experience replay')
 opts = parser.parse_args()
 
 if __name__ == '__main__':
@@ -130,7 +134,7 @@ if __name__ == '__main__':
         #"sac/all_agents/i4-agent.pkl", 
         "sac/all_agents/m-agent.pkl", 
         "sac/all_agents/n-agent.pkl", 
-        "sac/all_agents/n2-agent.pkl"
+        #"sac/all_agents/n2-agent.pkl"
         ]
     
     # Set up the pretrained agents

@@ -15,6 +15,8 @@ from base.experience_replay import UniformExperienceReplay, PrioritizedExperienc
 from collections import deque
 import random
 from torch.func import functional_call
+from memory_profiler import profile
+import logging
 
 # USING BASE SCRIPTS FROM 1. PLACE 2021 COMPETITION
 # https://github.com/anticdimi/laser-hockey 
@@ -56,6 +58,7 @@ class SACAgent(Agent):
         self.eval_mode = False
         # inital state buffer
         self.initial_state_buffer = deque(maxlen=1000)
+        self.max_episodes = self._config['max_episodes']
 
         # Check for prio buffer
         # Initialize replay buffer based on --per flag
@@ -164,9 +167,9 @@ class SACAgent(Agent):
         # Intrinsic reward weight
         self.beta = userconfig['beta']
         # Added decay so less random movement in later training stages
-        #self.beta_start = 1.0  # Initial beta (match your config)
-        #self.beta_end = 0.25    # Final beta after decay
-        #self.beta_decay = 0.999#5  # Adjust for ~2000 episodes
+        self.beta_start = self._config.get("beta", 1.0) # Initial beta (match your config)
+        self.beta_end = self._config.get("beta_end", 1.0)    # Final beta after decay
+        self.beta_decay = 0.999#5  # Adjust for ~2000 episodes
 
         # RND normalization stats
         # self.obs_mean = nn.Parameter(torch.zeros(obs_dim), requires_grad=False).to(self.device)
@@ -430,8 +433,20 @@ class SACAgent(Agent):
         with torch.no_grad():
             target = self.rnd_target(normalized_obs)
         predictor = self.rnd_predictor(normalized_obs)
-        return torch.mean((target - predictor) ** 2, dim=1)
 
+        # Log memory usage of RND tensors
+        #logging.info(f"RND target memory: {target.element_size() * target.nelement() / 1024 ** 2:.2f} MB")
+        #logging.info(f"RND predictor memory: {predictor.element_size() * predictor.nelement() / 1024 ** 2:.2f} MB")
+        return torch.mean((target - predictor) ** 2, dim=1)
+    
+    # rnd beta update
+    def update_rnd_beta(self, epsiode_counter):
+        """Update beta value for intrinsic reward scaling."""
+        fraction = min(epsiode_counter / (self.max_episodes * 9/10), 1.0)
+        self.beta = self.beta_start + fraction * (self.beta_end - self.beta_start)
+        #print(f"Current beta: {self.beta}")
+
+    #@profile
     def update_parameters(self, total_step):
         """
         Perform a single update step for the SAC agent, including:
@@ -445,19 +460,33 @@ class SACAgent(Agent):
         # Step 1: Sample a batch of transitions from the replay buffer
         data = self.buffer.sample(self._config['batch_size'])
         
-        # Extract components from the batch
-        state = torch.FloatTensor(np.stack(data[:, 0])).to(device=self.device)  # Current state
-        action = torch.FloatTensor(np.stack(data[:, 1])).to(device=self.device)   # Action taken
-        extrinsic_reward = torch.FloatTensor(np.stack(data[:, 2])).to(device=self.device)   # Extrinsic reward
-        next_state = torch.FloatTensor(np.stack(data[:, 3])).to(device=self.device)   # Next state
-        not_done = torch.FloatTensor(~np.stack(data[:, 4])).to(device=self.device)   # Done flag (inverted)
+
+
+        if self._config.get('per', False):
+            transitions = data['transitions']
+            weights = data['weights']
+            indices = data['indices']
+
+            state = torch.FloatTensor(np.stack([t[0] for t in transitions])).to(self.device)
+            action = torch.FloatTensor(np.stack([t[1] for t in transitions])).to(self.device)
+            extrinsic_reward = torch.FloatTensor(np.stack([t[2] for t in transitions])).to(self.device)
+            next_state = torch.FloatTensor(np.stack([t[3] for t in transitions])).to(self.device)
+            done = torch.BoolTensor(np.stack([t[4] for t in transitions])).to(self.device)
+            not_done = ~done
+        else:
+            state = torch.FloatTensor(np.stack([t[0] for t in data])).to(self.device)
+            action = torch.FloatTensor(np.stack([t[1] for t in data])).to(self.device)
+            extrinsic_reward = torch.FloatTensor(np.stack([t[2] for t in data])).to(self.device)
+            next_state = torch.FloatTensor(np.stack([t[3] for t in data])).to(self.device)
+            done = torch.BoolTensor(np.stack([t[4] for t in data])).to(self.device)
+            not_done = ~done
 
         # Update normalization stats during training (for RND)
         self.obs_mean.data = 0.99 * self.obs_mean + 0.01 * next_state.mean(dim=0)
         self.obs_std.data = 0.99 * self.obs_std + 0.01 * next_state.std(dim=0)
 
         # Step 2: Compute intrinsic rewards using RND
-        intrinsic_reward = self.compute_intrinsic_reward(next_state)  # MSE between target and predictor
+        intrinsic_reward = self.compute_intrinsic_reward(next_state).detach()   # MSE between target and predictor
         # Update running stats (EMA)
         self.intrinsic_reward_mean = 0.99 * self.intrinsic_reward_mean + 0.01 * intrinsic_reward.mean()
         self.intrinsic_reward_std = 0.99 * self.intrinsic_reward_std + 0.01 * intrinsic_reward.std()
@@ -467,7 +496,7 @@ class SACAgent(Agent):
         combined_reward = extrinsic_reward + self.beta * intrinsic_reward  # Total reward
 
         # Decay beta for less random movement
-        # self.beta = max(self.beta_end, self.beta * self.beta_decay)
+        #self.beta = max(self.beta_end, self.beta * self.beta_decay)
 
         # normalize inputs
         normalized_state = self.normalize(state)
@@ -484,26 +513,32 @@ class SACAgent(Agent):
 
 
 
-        # Step 4: Update the SAC critic networks
+        # Step 4: Update critic networks
         with torch.no_grad():
-            # Sample next action and compute its log probability
             next_state_action, next_state_log_pi, _, _ = self.actor.sample(normalized_next_state)
-            
-            # Compute target Q-values using the target critic networks
             q1_next_targ, q2_next_targ = self.critic_target(normalized_next_state, next_state_action)
-            
-            # Use the minimum Q-value for stability (clipped double Q-learning)
             min_qf_next_target = torch.min(q1_next_targ, q2_next_targ) - self.alpha * next_state_log_pi
-            
             next_q_value = combined_reward.unsqueeze(1) + not_done.unsqueeze(1) * self._config['gamma'] * min_qf_next_target
-            #next_q_value = next_q_value.unsqueeze(1)  # Fix shape mismatch
 
-        # Compute current Q-values
-        qf1, qf2 = self.critic(normalized_state, action)  # Shape: [batch_size, 1]
+        qf1, qf2 = self.critic(normalized_state, action)
 
-        # Compute critic losses
-        qf1_loss = self.critic.loss(qf1, next_q_value)
-        qf2_loss = self.critic.loss(qf2, next_q_value)
+        if self._config.get('per', False):
+            # Apply PER weights
+            weights_tensor = torch.FloatTensor(weights).to(self.device).detach()
+            qf1_loss = (weights_tensor * self.critic.loss(qf1, next_q_value)).mean()
+            qf2_loss = (weights_tensor * self.critic.loss(qf2, next_q_value)).mean()
+            
+            # Compute TD errors using min(Q1, Q2)
+            with torch.no_grad():
+                min_qf = torch.min(qf1, qf2)
+                td_errors = torch.abs(min_qf.detach() - next_q_value.detach()).cpu().numpy().flatten()
+            
+            # Update priorities
+            self.buffer.update_priorities(indices.flatten(), (td_errors + self.buffer._epsilon).flatten())
+        else:
+            qf1_loss = self.critic.loss(qf1, next_q_value)
+            qf2_loss = self.critic.loss(qf2, next_q_value)
+
         qf_loss = qf1_loss + qf2_loss
 
         # Update critic networks
