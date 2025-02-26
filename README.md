@@ -21,9 +21,14 @@ or add the following line to your Pipfile
 
 ``hockey = {editable = true, git = "https://git@github.com/martius-lab/hockey-env.git"}``
 
+## Training
 One training prompt for a base model was:
 python.exe .\sac\train_agent.py --mode normal --learning_rate 0.0005 --lr_milestones=10000 --alpha_milestones=10000 --gamma 0.98 --alpha 0.5 --selfplay True --show_percent 1 --beta 0.15 --beta_end 0.15 --adamw True --meta_tuning  
 
+
+## Evaluation
+Evaluation args could be:
+python .\sac\evaluate_agent_withLongAgent.py --mode normal --filename .\sac\latest_agent\o6-agent.pkl --eval_episodes 1000 --show_percent 0 --show   
 
 ## HockeyEnv (University Tuebingne)
 ``hockey.hockey_env.HockeyEnv``
