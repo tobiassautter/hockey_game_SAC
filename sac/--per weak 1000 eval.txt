@@ -1,0 +1,405 @@
+milestones 100: 
+
+d-agent: Tournament: 25.24 / 1.55
+--per weak 1000 eval:
++-------------+-------+
+| Mean reward | 3.935 |
++-------------+-------+
+| Mean touch  | 0.994 |
++-------------+-------+
+| Mean won    | 0.579 |
++-------------+-------+
+| Mean lost   | 0.072 |
++-------------+-------+
+
+--per strong 1000 eval:
++-------------+--------+
+| Mean reward | -1.188 |
++-------------+--------+
+| Mean touch  |  0.866 |
++-------------+--------+
+| Mean won    |  0.386 |
++-------------+--------+
+| Mean lost   |  0.243 |
++-------------+--------+
+
+
+b-6000:
+vanilla weak 1000 eval:
++-------------+-------+
+| Mean reward | 2.387 |
++-------------+-------+
+| Mean touch  | 0.998 |
++-------------+-------+
+| Mean won    | 0.537 |
++-------------+-------+
+| Mean lost   | 0.156 |
++-------------+-------+
+
+vanilla strong 1000 eval:
++-------------+--------+
+| Mean reward | -1.418 |
++-------------+--------+
+| Mean touch  |  0.844 |
++-------------+--------+
+| Mean won    |  0.429 |
++-------------+--------+
+| Mean lost   |  0.328 |
++-------------+--------+
+
+e-agent: Tournament: 26.89 / 1.49
+--per --automatic_entropy_tuning True --alpha_milestones=100 --weak:
++-------------+-------+
+| Mean reward | 5.856 |
++-------------+-------+
+| Mean touch  | 0.991 |
++-------------+-------+
+| Mean won    | 0.762 |
++-------------+-------+
+| Mean lost   | 0.087 |
++-------------+-------+
+--per --automatic_entropy_tuning True --alpha_milestones=100 --strong:
++-------------+--------+
+| Mean reward | -1.867 |
++-------------+--------+
+| Mean touch  |  0.827 |
++-------------+--------+
+| Mean won    |  0.425 |
++-------------+--------+
+| Mean lost   |  0.255 |
++-------------+--------+
+
+f2-agent: Tournament: 26.64 / 1.49
+--per --automatic_entropy_tuning True --alpha_milestones=100 --weak --beta 5.0 --add_self_every 2000:
++-------------+-------+
+| Mean reward | 7.071 |
++-------------+-------+
+| Mean touch  | 0.963 |
++-------------+-------+
+| Mean won    | 0.867 |
++-------------+-------+
+| Mean lost   | 0.088 |
++-------------+-------+
+--per --automatic_entropy_tuning True --alpha_milestones=100 --strong --beta 5.0 --add_self_every 2000:
++-------------+--------+
+| Mean reward | -0.979 |
++-------------+--------+
+| Mean touch  |  0.83  |
++-------------+--------+
+| Mean won    |  0.467 |
++-------------+--------+
+| Mean lost   |  0.308 |
++-------------+--------+
+
+g-agent: Tournament: 27.95 / 1.51
+--lr_milestones=200 --per --automatic_entropy_tuning True --alpha_milestones=200 --beta 10 --add_self_every 12000 --max_episodes 10000 --weak:
++-------------+-------+
+| Mean reward | 9.016 |
++-------------+-------+
+| Mean touch  | 0.994 |
++-------------+-------+
+| Mean won    | 0.965 |
++-------------+-------+
+| Mean lost   | 0.019 |
++-------------+-------+
+--lr_milestones=200 --per --automatic_entropy_tuning True --alpha_milestones=200 --beta 10 --add_self_every 12000 --max_episodes 10000 --strong:
++-------------+--------+
+| Mean reward | -4.25  |
++-------------+--------+
+| Mean touch  |  0.71  |
++-------------+--------+
+| Mean won    |  0.384 |
++-------------+--------+
+| Mean lost   |  0.328 |
++-------------+--------+
+
+#####################################################
+Updated reward with def reward:
+h-agent:
+--weak:
++-------------+--------+
+| Mean reward | -1.703 |
++-------------+--------+
+| Mean touch  |  0.942 |
++-------------+--------+
+| Mean won    |  0.097 |
++-------------+--------+
+| Mean lost   |  0.059 |
++-------------+--------+
+--strong:
++-------------+--------+
+| Mean reward | -3.645 |
++-------------+--------+
+| Mean touch  |  0.942 |
++-------------+--------+
+| Mean won    |  0.064 |
++-------------+--------+
+| Mean lost   |  0.148 |
++-------------+--------+
+
+i:agent: 27.53 / 1.52
+--mode normal --lr_milestones=100 --per --automatic_entropy_tuning True --alpha_milestones=100 --beta 5 --add_self_every 2000 --show_percent 3
+--weak:
++-------------+-------+
+| Mean reward | 5.794 |
++-------------+-------+
+| Mean touch  | 0.945 |
++-------------+-------+
+| Mean won    | 0.782 |
++-------------+-------+
+| Mean lost   | 0.09  |
++-------------+-------+
+--strong:
++-------------+-------+
+| Mean reward | 3.795 |
++-------------+-------+
+| Mean touch  | 0.933 |
++-------------+-------+
+| Mean won    | 0.698 |
++-------------+-------+
+| Mean lost   | 0.104 |
++-------------+-------+
+
+i2_agent (double trained):
+--mode normal --lr_milestones=200 --per --automatic_entropy_tuning True --alpha_milestones=200 --beta 1 --add_self_every 2000 --show_percent 3 --pretrained True --preload_path "sac/latest_agent/i-agent.pkl" --learning_rate 1e-5 --lr_factor 0.75 --max_episodes 2000 --gamma 0.98
+weak:
++-------------+-------+
+| Mean reward | 6.155 |
++-------------+-------+
+| Mean touch  | 0.926 |
++-------------+-------+
+| Mean won    | 0.812 |
++-------------+-------+
+| Mean lost   | 0.111 |
++-------------+-------+
+strong:
++-------------+-------+
+| Mean reward | 5.34  |
++-------------+-------+
+| Mean touch  | 0.94  |
++-------------+-------+
+| Mean won    | 0.784 |
++-------------+-------+
+| Mean lost   | 0.102 |
++-------------+-------+
+
+i3_agent (double_trained): 27.72 / 1.55
+--strong
++-------------+-------+
+| Mean reward | 5.328 |
++-------------+-------+
+| Mean touch  | 0.92  |
++-------------+-------+
+| Mean won    | 0.777 |
++-------------+-------+
+| Mean lost   | 0.092 |
++-------------+-------+
+
+
+i4 _agent (double_trained): 
+--mode normal --lr_milestones=100 --per --automatic_entropy_tuning True --alpha_milestones=100 --beta 5. --show_percent 3 --pretrained True --preload_path "sac/latest_agent/i-agent.pkl"   
+--strong
++-------------+-------+
+| Mean reward | 5.982 |
++-------------+-------+
+| Mean touch  | 0.962 |
++-------------+-------+
+| Mean won    | 0.806 |
++-------------+-------+
+| Mean lost   | 0.059 |
++-------------+-------+
+
+j-agent :
+--weak
++-------------+--------+
+| Mean reward | -0.047 |
++-------------+--------+
+| Mean touch  |  0.94  |
++-------------+--------+
+| Mean won    |  0.477 |
++-------------+--------+
+| Mean lost   |  0.216 |
++-------------+--------+
+--strong
++-------------+--------+
+| Mean reward | -1.63  |
++-------------+--------+
+| Mean touch  |  0.925 |
++-------------+--------+
+| Mean won    |  0.462 |
++-------------+--------+
+| Mean lost   |  0.267 |
++-------------+--------+
+
+
+k-agent:
+--weak:
++-------------+-------+
+| Mean reward | 1.824 |
++-------------+-------+
+| Mean touch  | 0.967 |
++-------------+-------+
+| Mean won    | 0.469 |
++-------------+-------+
+| Mean lost   | 0.036 |
++-------------+-------+
+--strong:
++-------------+-------+
+| Mean reward | 1.406 |
++-------------+-------+
+| Mean touch  | 0.961 |
++-------------+-------+
+| Mean won    | 0.515 |
++-------------+-------+
+| Mean lost   | 0.072 |
++-------------+-------+
+
+k2-agent:
+--strong
++-------------+-------+
+| Mean reward | 2.449 |
++-------------+-------+
+| Mean touch  | 0.979 |
++-------------+-------+
+| Mean won    | 0.549 |
++-------------+-------+
+| Mean lost   | 0.088 |
++-------------+-------+
+
+
+n-agent:
+--strong:
++-------------+-------+
+| Mean reward | 0.442 |
++-------------+-------+
+| Mean touch  | 0.935 |
++-------------+-------+
+| Mean won    | 0.493 |
++-------------+-------+
+| Mean lost   | 0.125 |
++-------------+-------+
+
+n2-agent: 
+--strong:
++-------------+--------+
+| Mean reward | -3.405 |
++-------------+--------+
+| Mean touch  |  0.862 |
++-------------+--------+
+| Mean won    |  0.325 |
++-------------+--------+
+| Mean lost   |  0.073 |
++-------------+--------+
+
+
+o1-agent:
+python.exe .\sac\train_agent.py --mode normal --learning_rate 0.0005 --lr_milestones 10000 --alpha_milestones 10000 --gamma 0.98 --alpha 0.8 --automatic_entropy_tuning True --selfplay True --show_percent 3 --beta 0.15 --beta_end 0.15 --adamw True --meta_tuning
+
+--strong
++-------------+-------+
+| Mean reward | 1.785 |
++-------------+-------+
+| Mean touch  | 0.987 |
++-------------+-------+
+| Mean won    | 0.53  |
++-------------+-------+
+| Mean lost   | 0.012 |
++-------------+-------+
+
+
+o2-agent:
+--strong
++-------------+-------+
+| Mean reward | 2.002 |
++-------------+-------+
+| Mean touch  | 0.99  |
++-------------+-------+
+| Mean won    | 0.448 |
++-------------+-------+
+| Mean lost   | 0.009 |
++-------------+-------+
+
+o3-agent: C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250223_160640_061574
+python.exe .\sac\train_agent.py --mode normal --adamw True --lr_milestones=10000 --show_percent 3 --alpha 0.8 --alpha_milestones=10000 --beta 0.15 --beta_end 0.15 --max_episodes 5000 --automatic_entropy_tuning False --learning_rate 0.0005 --gamma 0.98 --meta_tuning --selfplay True  --preload_path "sac/all_agents/o1-agent.pkl" --pretrained True
+--strong
++-------------+-------+
+| Mean reward | 2.54  |
++-------------+-------+
+| Mean touch  | 0.994 |
++-------------+-------+
+| Mean won    | 0.516 |
++-------------+-------+
+| Mean lost   | 0.009 |
++-------------+-------+
+
+o3.5-agent: normal_250223_185642_076360
+python.exe .\sac\train_agent.py --mode normal --adamw True --lr_milestones=10000 --show_percent 3 --alpha 0.8 --alpha_milestones=10000 --alpha_lr 5e-5  --beta 0.5 --beta_end 0.15 --max_episodes 5000 --automatic_entropy_tuning False --learning_rate 0.00025 --gamma 0.99 --meta_tuning --selfplay True  --preload_path "sac/all_agents/o3-agent.pkl" --pretrained True
++-------------+-------+
+| Mean reward | 5.018 |
++-------------+-------+
+| Mean touch  | 0.991 |
++-------------+-------+
+| Mean won    | 0.723 |
++-------------+-------+
+| Mean lost   | 0.01  |
++-------------+-------+
+
+
+o4-agent:normal_250223_185432_116196
+C:\UNI_Projekte\RL\homeworks\hockey-env_orig> python.exe .\sac\train_agent.py --mode normal --adamw True --lr_milestones=10000 --show_percent 3 --alpha 0.8 --alpha_milestones=10000 --beta 1.5 --beta_end 0.15 --max_episodes 2000 --learning_rate 0.0001 --gamma 0.95 --meta_tuning --selfplay True  --preload_path "sac/all_agents/o3-agent.pkl" --pretrained True --batch_size 256
++-------------+-------+
+| Mean reward | 3.506 |
++-------------+-------+
+| Mean touch  | 0.99  |
++-------------+-------+
+| Mean won    | 0.609 |
++-------------+-------+
+| Mean lost   | 0.008 |
++-------------+-------+
+o5-agent:
+Opponent: <hockey.hockey_env.BasicOpponent object at 0x0000016EABDFB080>
+Evaluated strong opponent. Reward: 5.783073647355561, Touch: 0.99, Won: 0.78, Lost: 0.0
+Evaluating weak opponent...
+Opponent: <hockey.hockey_env.BasicOpponent object at 0x0000016F62886210>
+Evaluated weak opponent. Reward: 7.517888344910034, Touch: 1.0, Won: 0.88, Lost: 0.02
++-------------+-------+
+| Mean reward | 4.186 |
++-------------+-------+
+| Mean touch  | 0.991 |
++-------------+-------+
+| Mean won    | 0.663 |
++-------------+-------+
+| Mean lost   | 0.002 |
++-------------+-------+
+
+o6-agent:normal_250223_232405_026393
+python.exe .\sac\train_agent.py --mode normal --adamw True --lr_milestones=10000 --show_percent 1 --alpha 0.5 --alpha_milestones=10000 --beta 0.5 --beta_end 0.1 --max_episodes 500 --learning_rate 0.00005 --automatic_entropy_tuning True --gamma 0.9  --preload_path "sac/latest_agent/o5-agent.pkl" --pretrained True --batch_size 512 --alpha_lr 1e-5 --evaluate_every 100
++-------------+-------+
+| Mean reward | 5.643 |
++-------------+-------+
+| Mean touch  | 0.997 |
++-------------+-------+
+| Mean won    | 0.78  |
++-------------+-------+
+| Mean lost   | 0     |
++-------------+-------+
+
+
+########################################################################################
+For eval:
+o1-agent:
+python.exe .\sac\train_agent.py --mode normal --learning_rate 0.0005 --lr_milestones 10000 --alpha_milestones 10000 --gamma 0.98 --alpha 0.8 --automatic_entropy_tuning True --selfplay True --show_percent 3 --beta 0.15 --beta_end 0.15 --adamw True --meta_tuning
+
+# RND test:
+Beta constant 0.15: C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250223_100331_115310
+Beta constant 2.5: C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250224_110742_009656
+Beta 0 (No RND): C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250224_110542_008445
+Beta Annealing 3.5-0.15: C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250224_110509_033768
+
+# Alpha Test:
+Meta : C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250224_130127_052660
+AET : C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250224_130954_017457
+Constant 0.35: C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250224_130903_029237
+Constant 0.1: C:\UNI_Projekte\RL\homeworks\hockey-env_orig\sac\data\normal_250224_131703_098180\
+
+
