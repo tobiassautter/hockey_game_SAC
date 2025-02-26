@@ -1,7 +1,7 @@
 # hockey-env
 
 This repository is an upgraded SAC version from: https://github.com/anticdimi/laser-hockey 
-It includes meta-tuning [Y. Wang ‘20 ] , updated models, observation normalization, modified rewards for stronger defense, RND networks [Burda ‘18], and a lot more.
+It includes meta-tuning [Y. Wang ‘20], updated models, observation normalization, modified rewards for stronger defense, RND networks [Burda ‘18], usage of adamW instead of adam and a lot more..
 It achieved place 28th out of 148 in the reinforcement learning project.
 
 Bot strong:
@@ -28,9 +28,9 @@ python.exe .\sac\train_agent.py --mode normal --learning_rate 0.0005 --lr_milest
 
 ## Evaluation
 Evaluation args could be:
-python .\sac\evaluate_agent_withLongAgent.py --mode normal --filename .\sac\latest_agent\o6-agent.pkl --eval_episodes 1000 --show_percent 0 --show   
+python .\sac\evaluate_agent.py --mode normal --filename .\sac\latest_agent\o6-agent.pkl --eval_episodes 1000 --show_percent 0 --show   
 
-## HockeyEnv (University Tuebingne)
+## HockeyEnv (University Tuebingen)
 ``hockey.hockey_env.HockeyEnv``
 
 A two-player (one per team) hockey environment.
