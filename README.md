@@ -1,19 +1,33 @@
 # hockey-env
 
-This repository contains a hockey-like game environment for RL
+This repository is an upgraded SAC version from: https://github.com/anticdimi/laser-hockey 
+It includes meta-tuning [Y. Wang ‘20 ] , updated models, observation normalization, modified rewards for stronger defense, RND networks [Burda ‘18], and a lot more.
+It achieved place 28th out of 148 in the reinforcement learning project.
+
+Bot strong:
+![Agent vs bot strong](assets/hockey_SAC_strong_bot.gif)
+
+Bot weak:
+![Agent vs weak strong](assets/hockey_SAC_weak_bot.gif)
 
 ## Install
 
+Install requirements.txt, it has all the latest libs used.
+
+Hockey-ENV from: 
 ``python3 -m pip install git+https://github.com/martius-lab/hockey-env.git``
 
 or add the following line to your Pipfile
 
 ``hockey = {editable = true, git = "https://git@github.com/martius-lab/hockey-env.git"}``
 
+One training prompt for a base model was:
+python.exe .\sac\train_agent.py --mode normal --learning_rate 0.0005 --lr_milestones=10000 --alpha_milestones=10000 --gamma 0.98 --alpha 0.5 --selfplay True --show_percent 1 --beta 0.15 --beta_end 0.15 --adamw True --meta_tuning  
+
 
 ## HockeyEnv
 
-![Screenshot](assets/hockeyenv1.png)
+![assets]
 
 ``hockey.hockey_env.HockeyEnv``
 
