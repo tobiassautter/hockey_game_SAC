@@ -25,10 +25,7 @@ One training prompt for a base model was:
 python.exe .\sac\train_agent.py --mode normal --learning_rate 0.0005 --lr_milestones=10000 --alpha_milestones=10000 --gamma 0.98 --alpha 0.5 --selfplay True --show_percent 1 --beta 0.15 --beta_end 0.15 --adamw True --meta_tuning  
 
 
-## HockeyEnv
-
-![assets]
-
+## HockeyEnv (University Tuebingne)
 ``hockey.hockey_env.HockeyEnv``
 
 A two-player (one per team) hockey environment.
